@@ -48,7 +48,12 @@
       background-size: 28px 28px; background-position: 0 0, 14px 14px;
     }
     .preview iframe { width: 100%; height: 100%; border: 0; background: transparent; }
-    .hint { opacity: .55; font-size: 12px; margin-top: 8px; }
+    .hint { opacity: .55; font-size: 12px; margin-top: 8px; line-height: 1.5; }
+    .urls { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .urls td { padding: 5px 6px; border-bottom: 1px solid #222b44; vertical-align: middle; }
+    .urls td.lbl { white-space: nowrap; opacity: .85; }
+    .urls code { background: #161c30; border: 1px solid #2a3658; border-radius: 6px; padding: 3px 7px; font-size: 11px; }
+    .urls button { background: #232b45; color: #fff; border: none; border-radius: 6px; padding: 4px 9px; font-size: 11px; cursor: pointer; }
   </style>
 </head>
 <body>
@@ -67,16 +72,17 @@
             <button data-pos="bottom-right">右下</button>
           </div>
         </div>
-        <div class="row"><label>横位置の余白</label><input type="range" id="offsetX" min="0" max="400" data-path="offsetX"><span class="val" id="offsetXv"></span></div>
-        <div class="row"><label>縦位置の余白</label><input type="range" id="offsetY" min="0" max="400" data-path="offsetY"><span class="val" id="offsetYv"></span></div>
-        <div class="row"><label>幅</label><input type="range" id="width" min="200" max="600" data-path="width"><span class="val" id="widthv"></span></div>
-        <div class="row"><label>拡大率</label><input type="range" id="scale" min="50" max="200" data-path="scale"><span class="val" id="scalev"></span></div>
+        <div class="row"><label>横位置の余白</label><input type="range" id="offsetX" min="0" max="400" data-path="offsetX" data-unit="px"><span class="val" id="offsetXv"></span></div>
+        <div class="row"><label>縦位置の余白</label><input type="range" id="offsetY" min="0" max="400" data-path="offsetY" data-unit="px"><span class="val" id="offsetYv"></span></div>
+        <div class="row"><label>幅</label><input type="range" id="width" min="200" max="600" data-path="width" data-unit="px"><span class="val" id="widthv"></span></div>
+        <div class="row"><label>拡大率</label><input type="range" id="scale" min="50" max="200" data-path="scale" data-unit="%"><span class="val" id="scalev"></span></div>
+        <div class="hint">※「全部入り」(/overlay.html) のときの配置です。各ウィンドウを個別に使う場合はOBS側で位置・サイズを調整します（下の「OBS用URL」参照）。</div>
       </div>
 
       <div class="card">
         <h2>デザイン</h2>
-        <div class="row"><label>角丸</label><input type="range" id="radius" min="0" max="30" data-path="radius"><span class="val" id="radiusv"></span></div>
-        <div class="row"><label>背景の不透明度</label><input type="range" id="bgOpacity" min="20" max="100" data-path="bgOpacity"><span class="val" id="bgOpacityv"></span></div>
+        <div class="row"><label>角丸</label><input type="range" id="radius" min="0" max="30" data-path="radius" data-unit="px"><span class="val" id="radiusv"></span></div>
+        <div class="row"><label>背景の不透明度</label><input type="range" id="bgOpacity" min="20" max="100" data-path="bgOpacity" data-unit="%"><span class="val" id="bgOpacityv"></span></div>
         <div class="row"><label>文字色</label><input type="color" id="textColor" data-path="textColor"></div>
         <div class="row"><label>青チーム色</label><input type="color" id="blueColor" data-path="blueColor"></div>
         <div class="row"><label>オレンジ色</label><input type="color" id="orangeColor" data-path="orangeColor"></div>
@@ -103,6 +109,27 @@
         <div class="row"><label>青チーム名</label><input type="text" class="wide" data-path="labels.blue"></div>
         <div class="row"><label>オレンジ名</label><input type="text" class="wide" data-path="labels.orange"></div>
         <div class="row"><label>待機列名</label><input type="text" class="wide" data-path="labels.waiting"></div>
+      </div>
+
+      <div class="card">
+        <h2>コメント表示</h2>
+        <div class="row"><label>コメントを出す</label><label class="check"><input type="checkbox" data-path="comments.show"></label></div>
+        <div class="row"><label>表示形式</label>
+          <div class="pos-grid" id="modeGrid" style="max-width:220px">
+            <button data-mode="list">縦の一覧</button>
+            <button data-mode="ticker">横に流れる</button>
+          </div>
+        </div>
+        <div class="row"><label>一覧の表示件数</label><input type="range" id="cmax" min="3" max="20" data-path="comments.max" data-unit="件"><span class="val" id="cmaxv"></span></div>
+        <div class="row"><label>流れる速さ</label><input type="range" id="cspeed" min="5" max="30" data-path="comments.speed" data-unit="秒"><span class="val" id="cspeedv"></span></div>
+        <div class="row"><label>アイコン表示</label><label class="check"><input type="checkbox" data-path="comments.showPhoto"></label></div>
+        <div class="hint">「縦の一覧」は新しいコメントが下に積まれます。「横に流れる」はニコニコ風に右→左へ流れます（コメント単独ウィンドウなら画面全体に流せます）。</div>
+      </div>
+
+      <div class="card">
+        <h2>OBS用URL（各ウィンドウを個別に配置）</h2>
+        <div class="hint" style="margin:0 0 8px">それぞれ別の「ブラウザソース」として追加すると、OBS上で1つずつ自由に移動・拡大縮小できます。</div>
+        <table class="urls" id="urlTable"></table>
       </div>
 
       <div class="btns">
@@ -159,8 +186,7 @@
     function updateRangeLabel(el) {
       const v = $(el.id + "v");
       if (!v) return;
-      const unit = el.id === "scale" || el.id === "bgOpacity" ? "%" : "px";
-      v.textContent = el.value + (el.id === "offsetX" || el.id === "offsetY" || el.id === "width" || el.id === "radius" || el.id === "scale" || el.id === "bgOpacity" ? unit : "");
+      v.textContent = el.value + (el.dataset.unit || "");
     }
 
     // 位置ボタン
@@ -170,6 +196,36 @@
       [...document.querySelectorAll("#posGrid button")].forEach((b) => b.classList.toggle("active", b.dataset.pos === pos));
       emitPatch("position", pos);
     });
+
+    // コメント表示形式ボタン
+    $("modeGrid").addEventListener("click", (e) => {
+      const mode = e.target.dataset.mode;
+      if (!mode) return;
+      [...document.querySelectorAll("#modeGrid button")].forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+      emitPatch("comments.mode", mode);
+    });
+
+    // OBS用URL一覧を生成
+    (function buildUrls() {
+      const base = location.origin;
+      const rows = [
+        ["全部入り", "overlay.html"],
+        ["統計のみ", "overlay.html?view=stats"],
+        ["チームのみ", "overlay.html?view=teams"],
+        ["待機列のみ", "overlay.html?view=waiting"],
+        ["コメントのみ", "overlay.html?view=comments"],
+        ["青チームのみ", "overlay.html?view=blue"],
+        ["オレンジのみ", "overlay.html?view=orange"],
+      ];
+      $("urlTable").innerHTML = rows.map(([lbl, p]) => {
+        const url = base + "/" + p;
+        return `<tr><td class="lbl">${lbl}</td><td><code>${url}</code></td><td><button data-copy="${url}">コピー</button></td></tr>`;
+      }).join("");
+      $("urlTable").addEventListener("click", (e) => {
+        const u = e.target.dataset.copy;
+        if (u) { navigator.clipboard?.writeText(u); e.target.textContent = "コピー済"; setTimeout(() => (e.target.textContent = "コピー"), 1200); }
+      });
+    })();
 
     $("resetBtn").onclick = () => { if (confirm("オーバーレイ設定を既定に戻しますか？")) socket.emit("settings:reset"); };
 
@@ -185,6 +241,8 @@
         if (el.type === "range") updateRangeLabel(el);
       });
       [...document.querySelectorAll("#posGrid button")].forEach((b) => b.classList.toggle("active", b.dataset.pos === s.position));
+      const cmode = s.comments ? s.comments.mode : "list";
+      [...document.querySelectorAll("#modeGrid button")].forEach((b) => b.classList.toggle("active", b.dataset.mode === cmode));
     }
 
     socket.on("state", (s) => applyToForm(s.settings));

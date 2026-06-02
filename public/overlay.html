@@ -60,6 +60,7 @@
     .panel.blue { --c: var(--blue); }
     .panel.orange { --c: var(--orange); }
     .panel.wait { --c: var(--accent); }
+    .panel.comments { --c: var(--accent); }
     .panel .mark { background: var(--c); }
     .panel .title { color: color-mix(in srgb, var(--c) 45%, #ffffff); }
 
@@ -87,6 +88,34 @@
       font-size: 12px; font-weight: 800; color: rgba(255,255,255,.4);
       font-variant-numeric: tabular-nums;
     }
+
+    /* コメント（縦一覧） */
+    .clist { list-style: none; padding: 7px; max-height: 60vh; overflow: hidden; }
+    .crow {
+      display: flex; align-items: flex-start; gap: 9px; padding: 6px 9px; margin: 4px 0;
+      background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.05);
+      border-radius: 9px; animation: slideIn .28s ease;
+    }
+    .crow .cbody { min-width: 0; }
+    .crow .cname { font-size: 11px; font-weight: 800; opacity: .7;
+      color: color-mix(in srgb, var(--accent) 40%, #ffffff); display: block; }
+    .crow .ctext { font-size: 14px; font-weight: 600; word-break: break-word; line-height: 1.35; }
+    .crow.owner .cname { color: #ffd24a; }
+    .crow.mod .cname { color: color-mix(in srgb, var(--blue) 45%, #ffffff); }
+
+    /* コメント（横流れ／弾幕） */
+    .ticker { position: relative; width: 100%; height: 150px; overflow: hidden; pointer-events: none; }
+    .dm {
+      position: absolute; left: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 14px; border-radius: 999px;
+      background: rgba(10,12,20,.66); border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 3px 12px rgba(0,0,0,.4); will-change: transform;
+      font-weight: 700; font-size: 16px; backdrop-filter: blur(2px);
+    }
+    .dm .cname { font-size: 12px; opacity: .7; font-weight: 800;
+      color: color-mix(in srgb, var(--accent) 40%, #ffffff); }
+    .dm.owner { border-color: rgba(255,210,74,.5); }
+    .dm.owner .cname { color: #ffd24a; }
 
     /* 表示/非表示 */
     body.no-avatars .avatar { display: none; }
@@ -127,6 +156,14 @@
       <div class="panel-head"><span class="mark"></span><span class="title" id="labelWait">参加希望（待機列）</span><span class="cap" id="capWait">0</span></div>
       <ul class="list" id="queue"></ul>
     </div>
+
+    <!-- コメント：縦一覧 -->
+    <div class="panel comments" id="panelComments">
+      <div class="panel-head"><span class="mark"></span><span class="title" id="labelComments">コメント</span></div>
+      <ul class="clist" id="commentList"></ul>
+    </div>
+    <!-- コメント：横流れ -->
+    <div class="ticker" id="ticker"></div>
   </div>
 
   <script src="/socket.io.min.js"></script>
@@ -137,8 +174,13 @@
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+    // 表示するウィンドウ: all | stats | teams | blue | orange | waiting | comments
+    const VIEW = (new URLSearchParams(location.search).get("view") || "all").toLowerCase();
+
     let SET = null;
     let lastState = null;
+    let comments = [];
+    let tickerLane = 0;
 
     function avatarHtml(e) {
       if (e.photo) return `<img class="avatar" src="${e.photo}"/>`;
@@ -172,6 +214,46 @@
       $("queue").innerHTML = q.length
         ? q.map((e, i) => memberHtml(e, i)).join("")
         : '<li class="empty-wait">「参加希望」コメントを待機中…</li>';
+      if (Array.isArray(s.comments)) { comments = s.comments.slice(); renderCommentList(); }
+    }
+
+    // コメント：縦一覧
+    function commentRowHtml(c) {
+      const cls = c.isOwner ? " owner" : c.isModerator ? " mod" : "";
+      const photo = SET && SET.comments.showPhoto ? avatarHtml(c) : "";
+      return `<li class="crow${cls}">${photo}<div class="cbody"><span class="cname">${esc(c.name)}</span><span class="ctext">${esc(c.text)}</span></div></li>`;
+    }
+    function renderCommentList() {
+      if (!SET || SET.comments.mode !== "list") return;
+      const max = SET.comments.max || 8;
+      const items = comments.slice(-max);
+      const el = $("commentList");
+      el.innerHTML = items.map(commentRowHtml).join("");
+      el.scrollTop = el.scrollHeight;
+    }
+
+    // コメント：横流れ（弾幕）
+    function spawnTicker(c) {
+      if (!SET || SET.comments.mode !== "ticker" || !SET.comments.show) return;
+      if (VIEW !== "all" && VIEW !== "comments") return;
+      const ticker = $("ticker");
+      const el = document.createElement("div");
+      el.className = "dm" + (c.isOwner ? " owner" : "");
+      const photo = SET.comments.showPhoto ? avatarHtml(c) : "";
+      el.innerHTML = `${photo}<span class="cname">${esc(c.name)}</span><span class="ctext">${esc(c.text)}</span>`;
+      ticker.appendChild(el);
+      const W = ticker.clientWidth || window.innerWidth;
+      const ew = el.offsetWidth;
+      const rowH = 38;
+      const lanes = Math.max(1, Math.floor((ticker.clientHeight || 150) / rowH));
+      const lane = tickerLane % lanes; tickerLane++;
+      el.style.top = lane * rowH + "px";
+      const dur = (SET.comments.speed || 12) * 1000;
+      const anim = el.animate(
+        [{ transform: `translateX(${W}px)` }, { transform: `translateX(${-ew}px)` }],
+        { duration: dur, easing: "linear" }
+      );
+      anim.onfinish = () => el.remove();
     }
 
     function applySettings(s) {
@@ -187,37 +269,82 @@
 
       const w = $("wrap");
       w.style.top = w.style.bottom = w.style.left = w.style.right = "auto";
-      const top = s.position.includes("top");
-      const right = s.position.includes("right");
-      (top ? (w.style.top = s.offsetY + "px") : (w.style.bottom = s.offsetY + "px"));
-      (right ? (w.style.right = s.offsetX + "px") : (w.style.left = s.offsetX + "px"));
-      w.style.width = s.width + "px";
-      w.style.transformOrigin = `${top ? "top" : "bottom"} ${right ? "right" : "left"}`;
-      w.style.transform = `scale(${(s.scale || 100) / 100})`;
+      const cmode = s.comments ? s.comments.mode : "list";
+      const tickerOnly = VIEW === "comments" && cmode === "ticker";
 
-      // ラベル（絵文字なし）
+      if (VIEW === "all") {
+        // 全部入り：設定の配置・サイズ・拡大率を適用
+        const top = s.position.includes("top");
+        const right = s.position.includes("right");
+        (top ? (w.style.top = s.offsetY + "px") : (w.style.bottom = s.offsetY + "px"));
+        (right ? (w.style.right = s.offsetX + "px") : (w.style.left = s.offsetX + "px"));
+        w.style.width = s.width + "px";
+        w.style.transformOrigin = `${top ? "top" : "bottom"} ${right ? "right" : "left"}`;
+        w.style.transform = `scale(${(s.scale || 100) / 100})`;
+      } else {
+        // 単独ウィンドウ：左上に固定し、配置・サイズはOBS側で行う
+        w.style.top = "0"; w.style.left = "0";
+        w.style.transform = "none"; w.style.transformOrigin = "top left";
+        w.style.width = tickerOnly ? "100%" : s.width + "px";
+      }
+      // 横流れの単独表示は画面いっぱいの高さに
+      $("ticker").style.height = tickerOnly ? "100vh" : "150px";
+
+      // ラベル
       $("labelBlue").textContent = s.labels.blue;
       $("labelOrange").textContent = s.labels.orange;
       $("labelWait").textContent = s.labels.waiting;
 
+      // 各コンポーネントの表示可否を決定
       const show = s.show;
+      const c = s.comments || { show: true, mode: "list" };
+      // VIEW で対象を絞る。all のときは設定のON/OFFも考慮。
+      const want = (name) => {
+        const inView = VIEW === "all" || VIEW === name ||
+          (VIEW === "teams" && (name === "blue" || name === "orange" || name === "vs"));
+        if (!inView) return false;
+        if (VIEW !== "all") return true; // 単独表示は常に出す
+        // 全部入りでは設定のON/OFF
+        if (name === "blue") return show.blueTeam;
+        if (name === "orange") return show.orangeTeam;
+        if (name === "vs") return show.vs && show.blueTeam && show.orangeTeam;
+        if (name === "waiting") return show.waiting;
+        if (name === "comments") return c.show;
+        if (name === "stats") return show.subs || show.viewers;
+        return true;
+      };
+
+      $("statsRow").classList.toggle("hidden", !want("stats"));
       $("statSubs").classList.toggle("hidden", !show.subs);
       $("statViewers").classList.toggle("hidden", !show.viewers);
-      $("statsRow").classList.toggle("hidden", !show.subs && !show.viewers);
-      $("panelBlue").classList.toggle("hidden", !show.blueTeam);
-      $("panelOrange").classList.toggle("hidden", !show.orangeTeam);
-      $("vs").classList.toggle("hidden", !(show.vs && show.blueTeam && show.orangeTeam));
-      $("panelWait").classList.toggle("hidden", !show.waiting);
+      $("panelBlue").classList.toggle("hidden", !want("blue"));
+      $("panelOrange").classList.toggle("hidden", !want("orange"));
+      $("vs").classList.toggle("hidden", !want("vs"));
+      $("panelWait").classList.toggle("hidden", !want("waiting"));
+
+      // コメント：モードに応じて一覧 or 横流れ
+      const commentsVisible = want("comments");
+      $("panelComments").classList.toggle("hidden", !(commentsVisible && cmode === "list"));
+      $("ticker").classList.toggle("hidden", !(commentsVisible && cmode === "ticker"));
+
       document.body.classList.toggle("no-avatars", !show.avatars);
       document.body.classList.toggle("no-numbers", !show.numbers);
 
       if (lastState) render(lastState);
+      renderCommentList();
     }
 
     socket.on("state", (s) => { if (s.settings) applySettings(s.settings); render(s); });
     socket.on("settings", applySettings);
+    socket.on("comment", (c) => {
+      comments.push(c);
+      if (comments.length > 60) comments.shift();
+      if (SET && SET.comments.mode === "ticker") spawnTicker(c);
+      else renderCommentList();
+    });
     socket.on("joined", () => {
       const p = $("panelWait");
+      if (p.classList.contains("hidden")) return;
       p.classList.remove("flash"); void p.offsetWidth; p.classList.add("flash");
     });
   </script>

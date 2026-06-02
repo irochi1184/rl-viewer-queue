@@ -36,6 +36,14 @@ export const DEFAULT_SETTINGS = {
     numbers: true,
     emptySlots: true,
   },
+  // コメント表示
+  comments: {
+    show: true,
+    mode: "list", // "list"（縦一覧）| "ticker"（横に流れる）
+    max: 8, // 縦一覧での表示件数
+    speed: 12, // 横流れ1コメントが流れ切る秒数
+    showPhoto: true, // アイコン表示
+  },
 };
 
 export class OverlaySettings extends EventEmitter {

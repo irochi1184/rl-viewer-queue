@@ -37,19 +37,33 @@ const app = express();
 app.use(express.json());
 
 // --- 静的ファイルは fs 読み込みで配信（exe化したスナップショットからも確実に読めるように）---
-function sendFile(res, file, type) {
+function sendFile(res, file, type, next) {
   try {
     const buf = fs.readFileSync(path.join(publicDir, file));
     res.type(type).send(buf);
   } catch {
+    if (next) return next();
     res.status(404).send("not found");
   }
 }
+const MIME = {
+  ".html": "text/html",
+  ".js": "application/javascript",
+  ".css": "text/css",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+};
 app.get("/", (_req, res) => res.redirect("/admin.html"));
-app.get("/admin.html", (_req, res) => sendFile(res, "admin.html", "html"));
-app.get("/overlay.html", (_req, res) => sendFile(res, "overlay.html", "html"));
-app.get("/settings.html", (_req, res) => sendFile(res, "settings.html", "html"));
-app.get("/socket.io.min.js", (_req, res) => sendFile(res, "socket.io.min.js", "application/javascript"));
+// public/ 配下のファイルを安全に配信（exe化のスナップショットからも fs で読む）。
+app.get(/.+/, (req, res, next) => {
+  if (req.method !== "GET") return next();
+  // パス・トラバーサル防止
+  const rel = path.normalize(decodeURIComponent(req.path)).replace(/^(\.\.[/\\])+/, "").replace(/^[/\\]+/, "");
+  if (!rel || rel.includes("..")) return next();
+  const type = MIME[path.extname(rel).toLowerCase()] || "application/octet-stream";
+  sendFile(res, rel, type, next);
+});
 
 const server = http.createServer(app);
 // serveClient:false … クライアントJSは上記の自前ルートで配信する。
@@ -61,12 +75,22 @@ function matchesJoin(text) {
   return JOIN_KEYWORDS.some((k) => lower.includes(k.toLowerCase()));
 }
 
+// 直近コメントのリングバッファ（後から接続した画面にも履歴を渡す）。
+const COMMENTS_KEEP = 40;
+const recentComments = [];
+function pushComment(c) {
+  recentComments.push(c);
+  if (recentComments.length > COMMENTS_KEEP) recentComments.shift();
+  io.emit("comment", c);
+}
+
 function snapshot() {
   return {
     ...state,
     keywords: JOIN_KEYWORDS,
     ...queue.snapshot(),
     settings: settings.get(),
+    comments: recentComments,
   };
 }
 
@@ -123,6 +147,15 @@ function runDemo() {
     state.concurrentViewers = 80 + Math.floor(Math.random() * 30);
     broadcast();
   }, 3000);
+
+  // ダミーコメントを流す。
+  const demoChatNames = ["みかん", "RL好き", "ゴリラ", "あおい", "ぺんぎん", "Taro", "くまさん", "視聴者X", "もも", "Kaz"];
+  const demoTexts = ["ナイスゴール！", "うますぎる笑", "参加希望", "こんばんは〜", "次いける？", "惜しい！", "ナイスセーブ", "今の見た？", "がんばれー", "ドリブルやば", "wwww", "3vs3たのしい", "初見です", "応援してます！"];
+  setInterval(() => {
+    const name = demoChatNames[Math.floor(Math.random() * demoChatNames.length)];
+    const text = demoTexts[Math.floor(Math.random() * demoTexts.length)];
+    pushComment({ id: "c" + Date.now() + Math.random(), name, photo: "", text });
+  }, 2200);
 }
 
 async function main() {
@@ -152,6 +185,16 @@ async function main() {
   });
 
   monitor.on("chat", (msg) => {
+    // すべてのコメントを表示用に配信。
+    pushComment({
+      id: msg.id,
+      name: msg.authorName,
+      photo: msg.authorPhoto,
+      text: msg.text,
+      isOwner: msg.isOwner,
+      isModerator: msg.isModerator,
+    });
+    // 「参加希望」なら待機列へ。
     if (!matchesJoin(msg.text)) return;
     const added = queue.add({
       name: msg.authorName,
