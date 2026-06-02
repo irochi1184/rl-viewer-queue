@@ -1,0 +1,13 @@
+node_modules/
+# 認証情報・トークン（絶対にコミットしないこと）
+.env
+client_secret*.json
+# 実行時に生成されるデータ（トークン・キュー・オーバーレイ設定）はコミットしない
+data/
+*.log
+.DS_Store
+# exeビルド成果物・中間バンドル
+dist/
+build/
+# 自動生成（ビルド時にコピーされる）
+public/socket.io.min.js

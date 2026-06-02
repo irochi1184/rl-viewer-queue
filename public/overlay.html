@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>参加者オーバーレイ</title>
+  <style>
+    /* OBSブラウザソース用。背景は透過にして配信画面に重ねる。 */
+    :root {
+      --text: #ffffff;
+      --blue: #1e6bff;
+      --orange: #ff7a18;
+      --accent: #2b6cff;
+      --radius: 16px;
+      --panel-alpha: 0.92;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: transparent;
+      font-family: "Inter", "Helvetica Neue", "Segoe UI", "Hiragino Kaku Gothic ProN",
+        "Hiragino Sans", "Noto Sans JP", sans-serif;
+      color: var(--text);
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { position: absolute; top: 24px; right: 24px; width: 340px; }
+
+    /* 統計 */
+    .stats { display: flex; gap: 8px; margin-bottom: 12px; }
+    .stat {
+      flex: 1;
+      background: linear-gradient(180deg, rgba(17,20,33,var(--panel-alpha)), rgba(11,13,22,var(--panel-alpha)));
+      border: 1px solid rgba(255,255,255,.08);
+      border-radius: calc(var(--radius) * 0.7);
+      padding: 9px 12px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.4);
+    }
+    .stat .label { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; opacity: .55; font-weight: 700; }
+    .stat .value { font-size: 24px; font-weight: 800; margin-top: 1px; line-height: 1.05;
+      font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+    /* パネル共通：ダークグラス＋色アクセント */
+    .panel {
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 10px;
+      background: linear-gradient(180deg, rgba(17,20,33,var(--panel-alpha)), rgba(11,13,22,var(--panel-alpha)));
+      border: 1px solid rgba(255,255,255,.08);
+      box-shadow: 0 10px 30px rgba(0,0,0,.45);
+    }
+    .panel-head {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px 9px;
+      border-bottom: 1px solid rgba(255,255,255,.07);
+    }
+    .panel-head .mark { width: 4px; height: 15px; border-radius: 2px; flex: none; }
+    .panel-head .title { font-weight: 800; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; }
+    .panel-head .cap {
+      margin-left: auto; font-size: 12px; font-weight: 700; opacity: .65;
+      font-variant-numeric: tabular-nums; letter-spacing: .04em;
+    }
+    .panel.blue { --c: var(--blue); }
+    .panel.orange { --c: var(--orange); }
+    .panel.wait { --c: var(--accent); }
+    .panel .mark { background: var(--c); }
+    .panel .title { color: color-mix(in srgb, var(--c) 45%, #ffffff); }
+
+    /* メンバー */
+    .list { list-style: none; padding: 7px; }
+    .item {
+      display: flex; align-items: center; gap: 10px; padding: 6px 9px; margin: 4px 0;
+      background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.05);
+      border-radius: 9px; min-height: 38px; animation: slideIn .28s ease;
+    }
+    .item.empty { background: rgba(255,255,255,.02); border-style: dashed; border-color: rgba(255,255,255,.12); }
+    .avatar {
+      width: 26px; height: 26px; border-radius: 50%; flex: none; object-fit: cover;
+      background: rgba(255,255,255,.1);
+    }
+    .avatar.initial {
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 800; color: rgba(255,255,255,.85);
+      background: rgba(255,255,255,.12);
+    }
+    .item .name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item.empty .name { opacity: .3; font-weight: 500; }
+    .num {
+      width: 20px; flex: none; text-align: center;
+      font-size: 12px; font-weight: 800; color: rgba(255,255,255,.4);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 表示/非表示 */
+    body.no-avatars .avatar { display: none; }
+    body.no-numbers .num { display: none; }
+    .hidden { display: none !important; }
+
+    /* VS 区切り */
+    .vs { display: flex; align-items: center; gap: 12px; margin: 4px 4px 8px; }
+    .vs::before, .vs::after { content: ""; flex: 1; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.22), transparent); }
+    .vs span { font-weight: 900; font-size: 13px; letter-spacing: .22em; opacity: .8; }
+
+    .empty-wait { padding: 14px; text-align: center; opacity: .45; font-size: 12px; }
+
+    @keyframes slideIn { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
+    .flash { animation: flash .6s ease; }
+    @keyframes flash { 0% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: 0 10px 30px rgba(0,0,0,.45); } }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="wrap">
+    <div class="stats" id="statsRow">
+      <div class="stat" id="statSubs"><div class="label">Subscribers</div><div class="value" id="subs">—</div></div>
+      <div class="stat" id="statViewers"><div class="label">Live Viewers</div><div class="value" id="viewers">—</div></div>
+    </div>
+
+    <div class="panel blue" id="panelBlue">
+      <div class="panel-head"><span class="mark"></span><span class="title" id="labelBlue">青チーム</span><span class="cap" id="capBlue">0/3</span></div>
+      <ul class="list" id="blue"></ul>
+    </div>
+    <div class="vs" id="vs"><span>VS</span></div>
+    <div class="panel orange" id="panelOrange">
+      <div class="panel-head"><span class="mark"></span><span class="title" id="labelOrange">オレンジチーム</span><span class="cap" id="capOrange">0/3</span></div>
+      <ul class="list" id="orange"></ul>
+    </div>
+
+    <div class="panel wait" id="panelWait">
+      <div class="panel-head"><span class="mark"></span><span class="title" id="labelWait">参加希望（待機列）</span><span class="cap" id="capWait">0</span></div>
+      <ul class="list" id="queue"></ul>
+    </div>
+  </div>
+
+  <script src="/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("ja-JP"));
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    let SET = null;
+    let lastState = null;
+
+    function avatarHtml(e) {
+      if (e.photo) return `<img class="avatar" src="${e.photo}"/>`;
+      const ch = (e.name || "?").trim().charAt(0).toUpperCase() || "?";
+      return `<div class="avatar initial">${esc(ch)}</div>`;
+    }
+    function memberHtml(e, i) {
+      const num = i != null ? `<span class="num">${i + 1}</span>` : "";
+      return `<li class="item">${num}${avatarHtml(e)}<span class="name">${esc(e.name)}</span></li>`;
+    }
+    function emptySlot() {
+      return `<li class="item empty"><div class="avatar"></div><span class="name">空き</span></li>`;
+    }
+    function renderTeam(elId, capId, members, size, showEmpty) {
+      let html = members.map((e) => memberHtml(e)).join("");
+      if (showEmpty) for (let k = members.length; k < size; k++) html += emptySlot();
+      $(elId).innerHTML = html;
+      $(capId).textContent = `${members.length}/${size}`;
+    }
+
+    function render(s) {
+      lastState = s;
+      $("subs").textContent = fmt(s.subscriberCount);
+      $("viewers").textContent = fmt(s.concurrentViewers);
+      const size = s.teamSize || 3;
+      const showEmpty = SET ? SET.show.emptySlots : true;
+      renderTeam("blue", "capBlue", s.blue || [], size, showEmpty);
+      renderTeam("orange", "capOrange", s.orange || [], size, showEmpty);
+      const q = s.queue || [];
+      $("capWait").textContent = q.length;
+      $("queue").innerHTML = q.length
+        ? q.map((e, i) => memberHtml(e, i)).join("")
+        : '<li class="empty-wait">「参加希望」コメントを待機中…</li>';
+    }
+
+    function applySettings(s) {
+      if (!s) return;
+      SET = s;
+      const root = document.documentElement.style;
+      root.setProperty("--text", s.textColor);
+      root.setProperty("--blue", s.blueColor);
+      root.setProperty("--orange", s.orangeColor);
+      root.setProperty("--accent", s.accentColor);
+      root.setProperty("--radius", s.radius + "px");
+      root.setProperty("--panel-alpha", (s.bgOpacity / 100).toString());
+
+      const w = $("wrap");
+      w.style.top = w.style.bottom = w.style.left = w.style.right = "auto";
+      const top = s.position.includes("top");
+      const right = s.position.includes("right");
+      (top ? (w.style.top = s.offsetY + "px") : (w.style.bottom = s.offsetY + "px"));
+      (right ? (w.style.right = s.offsetX + "px") : (w.style.left = s.offsetX + "px"));
+      w.style.width = s.width + "px";
+      w.style.transformOrigin = `${top ? "top" : "bottom"} ${right ? "right" : "left"}`;
+      w.style.transform = `scale(${(s.scale || 100) / 100})`;
+
+      // ラベル（絵文字なし）
+      $("labelBlue").textContent = s.labels.blue;
+      $("labelOrange").textContent = s.labels.orange;
+      $("labelWait").textContent = s.labels.waiting;
+
+      const show = s.show;
+      $("statSubs").classList.toggle("hidden", !show.subs);
+      $("statViewers").classList.toggle("hidden", !show.viewers);
+      $("statsRow").classList.toggle("hidden", !show.subs && !show.viewers);
+      $("panelBlue").classList.toggle("hidden", !show.blueTeam);
+      $("panelOrange").classList.toggle("hidden", !show.orangeTeam);
+      $("vs").classList.toggle("hidden", !(show.vs && show.blueTeam && show.orangeTeam));
+      $("panelWait").classList.toggle("hidden", !show.waiting);
+      document.body.classList.toggle("no-avatars", !show.avatars);
+      document.body.classList.toggle("no-numbers", !show.numbers);
+
+      if (lastState) render(lastState);
+    }
+
+    socket.on("state", (s) => { if (s.settings) applySettings(s.settings); render(s); });
+    socket.on("settings", applySettings);
+    socket.on("joined", () => {
+      const p = $("panelWait");
+      p.classList.remove("flash"); void p.offsetWidth; p.classList.add("flash");
+    });
+  </script>
+</body>
+</html>

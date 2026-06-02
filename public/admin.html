@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>参加者 管理画面</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; background: #0f1320; color: #e8ecf5;
+      font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+    h1 { font-size: 19px; margin: 0 0 14px; }
+    .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .chip { display: flex; align-items: center; gap: 8px; background: #1a2138; border: 1px solid #2a3658;
+      border-radius: 10px; padding: 7px 12px; font-size: 13px; }
+    .chip .v { font-weight: 800; font-size: 17px; font-variant-numeric: tabular-nums; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #f55; }
+    .dot.on { background: #3ad07a; box-shadow: 0 0 8px #3ad07a; }
+
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+    button { background: #2b6cff; color: #fff; border: none; cursor: pointer; border-radius: 8px;
+      padding: 8px 13px; font-size: 13px; font-weight: 700; }
+    button:hover { filter: brightness(1.12); }
+    button.ghost { background: #232b45; }
+    button.danger { background: #c0394b; }
+    button.warn { background: #b5760f; }
+    input[type=text] { background: #161c30; border: 1px solid #2a3658; color: #fff;
+      border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+
+    .size-group { display: flex; gap: 4px; background: #161c30; padding: 4px; border-radius: 10px; border: 1px solid #2a3658; }
+    .size-group .sz { background: transparent; padding: 6px 10px; font-size: 13px; opacity: .7; }
+    .size-group .sz.active { background: #2b6cff; opacity: 1; }
+    .label { font-size: 12px; opacity: .7; margin-right: 2px; }
+
+    .cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 14px; }
+    .col { background: #141a2c; border: 1px solid #2a3658; border-radius: 12px; padding: 10px; min-height: 220px; }
+    .col h2 { font-size: 14px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; }
+    .col h2 .ttl { display: flex; align-items: center; gap: 7px; }
+    .tdot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+    .tdot.q { background: #5b6b9c; }
+    .tdot.b { background: #2f6bd8; }
+    .tdot.o { background: #e07a14; }
+    .col.blue { border-color: #2f6bd8; }
+    .col.orange { border-color: #c9821f; }
+    .drop { list-style: none; padding: 0; margin: 0; min-height: 160px; }
+    .drop.over { outline: 2px dashed #6f8fff; outline-offset: -4px; border-radius: 8px; }
+
+    li.row { display: flex; align-items: center; gap: 8px; background: #1c2440; border: 1px solid #2e3a60;
+      border-radius: 9px; padding: 8px 10px; margin: 6px 0; cursor: grab; }
+    li.row.dragging { opacity: .4; }
+    .num { width: 20px; text-align: center; font-weight: 700; color: #7aa0ff; font-size: 12px; }
+    .avatar { width: 26px; height: 26px; border-radius: 50%; background: #2a3658; object-fit: cover; flex: none; }
+    .name { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .mini { display: flex; gap: 3px; }
+    .mini button { padding: 3px 6px; font-size: 11px; font-weight: 700; border-radius: 6px; }
+    .b-blue { background: #1e6bff; } .b-orange { background: #e07a14; } .b-wait { background: #3a4570; }
+    .x { background: transparent; color: #f88; font-size: 15px; padding: 2px 5px; }
+    .empty { padding: 16px; text-align: center; opacity: .4; font-size: 12px; }
+    .err { color: #ffb3b3; font-size: 13px; min-height: 18px; margin: 8px 0 0; }
+    .hint { opacity: .55; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>参加者・チーム管理</h1>
+
+  <div class="bar">
+    <div class="chip"><span class="dot" id="dot"></span><span id="connText">未接続</span></div>
+    <div class="chip">登録者 <span class="v" id="subs">—</span></div>
+    <div class="chip">同時視聴 <span class="v" id="viewers">—</span></div>
+    <div class="chip">待機 <span class="v" id="count">0</span></div>
+  </div>
+
+  <div class="controls">
+    <span class="label">試合形式</span>
+    <div class="size-group" id="sizeGroup">
+      <button class="sz" data-n="1">1vs1</button>
+      <button class="sz" data-n="2">2vs2</button>
+      <button class="sz" data-n="3">3vs3</button>
+      <button class="sz" data-n="4">4vs4</button>
+    </div>
+    <button id="autoBtn">自動振り分け</button>
+    <button class="warn" id="swapBtn">サイド交代</button>
+    <button class="ghost" id="clearTeamsBtn">チーム解除</button>
+  </div>
+  <div class="controls">
+    <input type="text" id="addName" placeholder="手動で名前を追加" />
+    <button id="addBtn">追加</button>
+    <span style="flex:1"></span>
+    <a href="/settings.html" target="_blank" style="text-decoration:none"><button class="ghost">オーバーレイ設定</button></a>
+    <button class="ghost" id="reconnectBtn">再接続</button>
+    <button class="danger" id="clearBtn">全クリア</button>
+  </div>
+  <div class="err" id="err"></div>
+
+  <div class="cols">
+    <div class="col">
+      <h2><span class="ttl"><span class="tdot q"></span>待機列</span><span id="hWait">0</span></h2>
+      <ul class="drop" id="dropQueue" data-team="queue"><li class="empty">参加者なし</li></ul>
+    </div>
+    <div class="col blue">
+      <h2><span class="ttl"><span class="tdot b"></span>青チーム</span><span id="hBlue">0/3</span></h2>
+      <ul class="drop" id="dropBlue" data-team="blue"></ul>
+    </div>
+    <div class="col orange">
+      <h2><span class="ttl"><span class="tdot o"></span>オレンジ</span><span id="hOrange">0/3</span></h2>
+      <ul class="drop" id="dropOrange" data-team="orange"></ul>
+    </div>
+  </div>
+  <div class="hint">カードはドラッグで枠間を移動できます。カード上の「青/オレンジ/待機」ボタンでも移動可。キーワード: <span id="kw"></span></div>
+
+  <script src="/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("ja-JP"));
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    // 現在の状態（move計算用）
+    let S = { teamSize: 3, queue: [], blue: [], orange: [] };
+
+    function render(s) {
+      $("subs").textContent = fmt(s.subscriberCount);
+      $("viewers").textContent = fmt(s.concurrentViewers);
+      $("dot").className = "dot" + (s.connected ? " on" : "");
+      $("connText").textContent = s.connected ? "配信に接続中" : "未接続（配信待ち）";
+      $("err").textContent = s.lastError ? "⚠ " + s.lastError : "";
+      $("kw").textContent = (s.keywords || []).join(" / ");
+
+      S = { teamSize: s.teamSize || 3, queue: s.queue || [], blue: s.blue || [], orange: s.orange || [] };
+
+      // 試合形式ボタン
+      [...document.querySelectorAll(".sz")].forEach((b) =>
+        b.classList.toggle("active", Number(b.dataset.n) === S.teamSize));
+
+      $("count").textContent = S.queue.length;
+      $("hWait").textContent = S.queue.length;
+      $("hBlue").textContent = `${S.blue.length}/${S.teamSize}`;
+      $("hOrange").textContent = `${S.orange.length}/${S.teamSize}`;
+
+      renderList("dropQueue", S.queue, "queue");
+      renderList("dropBlue", S.blue, "blue");
+      renderList("dropOrange", S.orange, "orange");
+      bindDrag();
+    }
+
+    function rowHtml(e, i, team) {
+      const avatar = e.photo ? `<img class="avatar" src="${e.photo}"/>` : `<div class="avatar"></div>`;
+      const moves =
+        (team !== "blue" ? `<button class="b-blue" data-move="blue" data-id="${e.id}">青</button>` : "") +
+        (team !== "orange" ? `<button class="b-orange" data-move="orange" data-id="${e.id}">橙</button>` : "") +
+        (team !== "queue" ? `<button class="b-wait" data-move="queue" data-id="${e.id}">待機</button>` : "");
+      return `<li class="row" draggable="true" data-id="${e.id}">
+        <span class="num">${i + 1}</span>${avatar}
+        <span class="name">${esc(e.name)}</span>
+        <span class="mini">${moves}</span>
+        <button class="x" data-remove="${e.id}">✕</button>
+      </li>`;
+    }
+
+    function renderList(elId, arr, team) {
+      const el = $(elId);
+      el.innerHTML = arr.length
+        ? arr.map((e, i) => rowHtml(e, i, team)).join("")
+        : (team === "queue" ? '<li class="empty">参加者なし</li>' : "");
+    }
+
+    // --- ドラッグ＆ドロップ（3カラム間移動） ---
+    function bindDrag() {
+      document.querySelectorAll("li.row").forEach((li) => {
+        li.addEventListener("dragstart", () => li.classList.add("dragging"));
+        li.addEventListener("dragend", () => { li.classList.remove("dragging"); commit(); });
+      });
+      document.querySelectorAll(".drop").forEach((zone) => {
+        zone.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          zone.classList.add("over");
+          const dragging = document.querySelector(".dragging");
+          if (!dragging) return;
+          const after = afterElement(zone, e.clientY);
+          if (after == null) zone.appendChild(dragging);
+          else zone.insertBefore(dragging, after);
+        });
+        zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+        zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("over"); });
+      });
+    }
+    function afterElement(zone, y) {
+      const els = [...zone.querySelectorAll("li.row:not(.dragging)")];
+      let closest = null, closestOffset = -Infinity;
+      for (const el of els) {
+        const box = el.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closestOffset) { closestOffset = offset; closest = el; }
+      }
+      return closest;
+    }
+    function readZone(elId) {
+      return [...$(elId).querySelectorAll("li.row")].map((li) => li.dataset.id);
+    }
+    function commit() {
+      socket.emit("queue:arrange", {
+        queue: readZone("dropQueue"),
+        blue: readZone("dropBlue"),
+        orange: readZone("dropOrange"),
+      });
+    }
+
+    // --- ボタンによる移動（クリックで素早く） ---
+    function moveTo(id, team) {
+      const groups = {
+        queue: S.queue.map((e) => e.id),
+        blue: S.blue.map((e) => e.id),
+        orange: S.orange.map((e) => e.id),
+      };
+      for (const k of ["queue", "blue", "orange"]) groups[k] = groups[k].filter((x) => x !== id);
+      groups[team].push(id);
+      socket.emit("queue:arrange", groups);
+    }
+
+    document.body.addEventListener("click", (e) => {
+      const mv = e.target.dataset.move, rm = e.target.dataset.remove;
+      if (mv) moveTo(e.target.dataset.id, mv);
+      else if (rm) socket.emit("queue:remove", rm);
+    });
+
+    // --- 操作ボタン ---
+    $("sizeGroup").addEventListener("click", (e) => {
+      const n = e.target.dataset.n;
+      if (n) socket.emit("queue:setTeamSize", Number(n));
+    });
+    $("autoBtn").onclick = () => socket.emit("queue:autoAssign");
+    $("swapBtn").onclick = () => socket.emit("queue:swapTeams");
+    $("clearTeamsBtn").onclick = () => socket.emit("queue:clearTeams");
+    $("clearBtn").onclick = () => { if (confirm("全参加者を削除しますか？")) socket.emit("queue:clear"); };
+    $("reconnectBtn").onclick = () => socket.emit("monitor:reconnect");
+    $("addBtn").onclick = () => { const v = $("addName").value; if (v.trim()) { socket.emit("queue:add", v); $("addName").value = ""; } };
+    $("addName").addEventListener("keydown", (e) => { if (e.key === "Enter") $("addBtn").click(); });
+
+    socket.on("state", render);
+  </script>
+</body>
+</html>

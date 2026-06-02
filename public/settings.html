@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>オーバーレイ設定</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 20px; background: #0f1320; color: #e8ecf5;
+      font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; }
+    h1 { font-size: 19px; margin: 0 0 4px; }
+    .sub { opacity: .6; font-size: 13px; margin-bottom: 16px; }
+    a { color: #7aa0ff; }
+    .layout { display: grid; grid-template-columns: 1fr 420px; gap: 24px; align-items: start; }
+    @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+
+    .card { background: #141a2c; border: 1px solid #2a3658; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    .card h2 { font-size: 14px; margin: 0 0 12px; color: #9fb4ff; }
+    .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+    .row label { width: 120px; font-size: 13px; opacity: .85; }
+    .row .val { width: 52px; text-align: right; font-size: 12px; opacity: .7; font-variant-numeric: tabular-nums; }
+    input[type=range] { flex: 1; }
+    input[type=number], input[type=text] { background: #161c30; border: 1px solid #2a3658; color: #fff;
+      border-radius: 8px; padding: 7px 10px; font-size: 13px; width: 90px; }
+    input[type=text].wide { flex: 1; width: auto; }
+    input[type=color] { width: 42px; height: 30px; border: 1px solid #2a3658; border-radius: 6px; background: #161c30; cursor: pointer; }
+    .pos-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; max-width: 220px; }
+    .pos-grid button { background: #232b45; color: #fff; border: 1px solid #2a3658; border-radius: 8px; padding: 10px; cursor: pointer; font-size: 12px; }
+    .pos-grid button.active { background: #2b6cff; border-color: #2b6cff; }
+    .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+    .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .check input { width: 16px; height: 16px; }
+    .btns { display: flex; gap: 8px; margin-top: 4px; }
+    button.action { background: #2b6cff; color: #fff; border: none; border-radius: 8px; padding: 9px 14px; font-weight: 700; cursor: pointer; font-size: 13px; }
+    button.ghost { background: #232b45; }
+
+    /* プレビュー */
+    .preview-wrap { position: sticky; top: 20px; }
+    .preview-head { font-size: 13px; opacity: .7; margin-bottom: 8px; }
+    .preview {
+      position: relative; width: 100%; height: 600px; border-radius: 12px; overflow: hidden;
+      border: 1px solid #2a3658;
+      /* 透過確認用のチェッカー柄＋ゲーム画面っぽい暗さ */
+      background-color: #1b2230;
+      background-image:
+        linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.04) 75%),
+        linear-gradient(45deg, rgba(255,255,255,.04) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.04) 75%);
+      background-size: 28px 28px; background-position: 0 0, 14px 14px;
+    }
+    .preview iframe { width: 100%; height: 100%; border: 0; background: transparent; }
+    .hint { opacity: .55; font-size: 12px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>オーバーレイ設定</h1>
+  <div class="sub">変更は即座にOBS表示とプレビューに反映されます。 <a href="/admin.html">← 管理画面へ戻る</a></div>
+
+  <div class="layout">
+    <div>
+      <div class="card">
+        <h2>配置とサイズ</h2>
+        <div class="row"><label>表示位置</label>
+          <div class="pos-grid" id="posGrid">
+            <button data-pos="top-left">左上</button>
+            <button data-pos="top-right">右上</button>
+            <button data-pos="bottom-left">左下</button>
+            <button data-pos="bottom-right">右下</button>
+          </div>
+        </div>
+        <div class="row"><label>横位置の余白</label><input type="range" id="offsetX" min="0" max="400" data-path="offsetX"><span class="val" id="offsetXv"></span></div>
+        <div class="row"><label>縦位置の余白</label><input type="range" id="offsetY" min="0" max="400" data-path="offsetY"><span class="val" id="offsetYv"></span></div>
+        <div class="row"><label>幅</label><input type="range" id="width" min="200" max="600" data-path="width"><span class="val" id="widthv"></span></div>
+        <div class="row"><label>拡大率</label><input type="range" id="scale" min="50" max="200" data-path="scale"><span class="val" id="scalev"></span></div>
+      </div>
+
+      <div class="card">
+        <h2>デザイン</h2>
+        <div class="row"><label>角丸</label><input type="range" id="radius" min="0" max="30" data-path="radius"><span class="val" id="radiusv"></span></div>
+        <div class="row"><label>背景の不透明度</label><input type="range" id="bgOpacity" min="20" max="100" data-path="bgOpacity"><span class="val" id="bgOpacityv"></span></div>
+        <div class="row"><label>文字色</label><input type="color" id="textColor" data-path="textColor"></div>
+        <div class="row"><label>青チーム色</label><input type="color" id="blueColor" data-path="blueColor"></div>
+        <div class="row"><label>オレンジ色</label><input type="color" id="orangeColor" data-path="orangeColor"></div>
+        <div class="row"><label>アクセント色</label><input type="color" id="accentColor" data-path="accentColor"></div>
+      </div>
+
+      <div class="card">
+        <h2>表示する項目</h2>
+        <div class="checks">
+          <label class="check"><input type="checkbox" data-path="show.subs">登録者数</label>
+          <label class="check"><input type="checkbox" data-path="show.viewers">同時視聴者数</label>
+          <label class="check"><input type="checkbox" data-path="show.blueTeam">青チーム</label>
+          <label class="check"><input type="checkbox" data-path="show.orangeTeam">オレンジチーム</label>
+          <label class="check"><input type="checkbox" data-path="show.waiting">待機列</label>
+          <label class="check"><input type="checkbox" data-path="show.vs">VS表示</label>
+          <label class="check"><input type="checkbox" data-path="show.avatars">アイコン画像</label>
+          <label class="check"><input type="checkbox" data-path="show.numbers">順番の番号</label>
+          <label class="check"><input type="checkbox" data-path="show.emptySlots">空きスロット</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>ラベル文言</h2>
+        <div class="row"><label>青チーム名</label><input type="text" class="wide" data-path="labels.blue"></div>
+        <div class="row"><label>オレンジ名</label><input type="text" class="wide" data-path="labels.orange"></div>
+        <div class="row"><label>待機列名</label><input type="text" class="wide" data-path="labels.waiting"></div>
+      </div>
+
+      <div class="btns">
+        <button class="action ghost" id="resetBtn">既定に戻す</button>
+      </div>
+    </div>
+
+    <div class="preview-wrap">
+      <div class="preview-head">ライブプレビュー（チェッカー柄＝透過部分。OBSではゲーム画面が透けます）</div>
+      <div class="preview"><iframe src="/overlay.html" title="preview"></iframe></div>
+      <div class="hint">プレビューが空のときは、管理画面で名前を追加するか「デモ起動(npm run demo)」で確認できます。</div>
+    </div>
+  </div>
+
+  <script src="/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const $ = (id) => document.getElementById(id);
+
+    // ネストパスへ値をセット
+    function setByPath(obj, path, value) {
+      const keys = path.split(".");
+      let o = obj;
+      for (let i = 0; i < keys.length - 1; i++) o = o[keys[i]] = o[keys[i]] || {};
+      o[keys[keys.length - 1]] = value;
+    }
+    function getByPath(obj, path) {
+      return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), obj);
+    }
+
+    // data-path を持つ全入力
+    const inputs = [...document.querySelectorAll("[data-path]")];
+
+    // サーバーへ部分更新を送る
+    function emitPatch(path, value) {
+      const patch = {};
+      setByPath(patch, path, value);
+      socket.emit("settings:update", patch);
+    }
+
+    // 入力イベント
+    inputs.forEach((el) => {
+      const path = el.dataset.path;
+      const ev = el.type === "color" || el.type === "text" ? "input" : "input";
+      el.addEventListener(ev, () => {
+        let v;
+        if (el.type === "checkbox") v = el.checked;
+        else if (el.type === "range") { v = Number(el.value); updateRangeLabel(el); }
+        else v = el.value;
+        emitPatch(path, v);
+      });
+    });
+
+    function updateRangeLabel(el) {
+      const v = $(el.id + "v");
+      if (!v) return;
+      const unit = el.id === "scale" || el.id === "bgOpacity" ? "%" : "px";
+      v.textContent = el.value + (el.id === "offsetX" || el.id === "offsetY" || el.id === "width" || el.id === "radius" || el.id === "scale" || el.id === "bgOpacity" ? unit : "");
+    }
+
+    // 位置ボタン
+    $("posGrid").addEventListener("click", (e) => {
+      const pos = e.target.dataset.pos;
+      if (!pos) return;
+      [...document.querySelectorAll("#posGrid button")].forEach((b) => b.classList.toggle("active", b.dataset.pos === pos));
+      emitPatch("position", pos);
+    });
+
+    $("resetBtn").onclick = () => { if (confirm("オーバーレイ設定を既定に戻しますか？")) socket.emit("settings:reset"); };
+
+    // サーバーから設定を受け取りフォームに反映（編集中の項目は上書きしない）
+    function applyToForm(s) {
+      if (!s) return;
+      inputs.forEach((el) => {
+        if (el === document.activeElement) return; // 編集中はそのまま
+        const v = getByPath(s, el.dataset.path);
+        if (v == null) return;
+        if (el.type === "checkbox") el.checked = !!v;
+        else el.value = v;
+        if (el.type === "range") updateRangeLabel(el);
+      });
+      [...document.querySelectorAll("#posGrid button")].forEach((b) => b.classList.toggle("active", b.dataset.pos === s.position));
+    }
+
+    socket.on("state", (s) => applyToForm(s.settings));
+    socket.on("settings", applyToForm);
+  </script>
+</body>
+</html>

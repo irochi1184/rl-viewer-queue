@@ -1,0 +1,39 @@
+{
+  "name": "rl-viewer-queue",
+  "version": "1.0.0",
+  "description": "Rocket League 視聴者参加型配信用の参加者リスト＋チーム分け＋OBSオーバーレイツール",
+  "type": "module",
+  "main": "src/server.js",
+  "bin": "build/app.cjs",
+  "scripts": {
+    "start": "node src/server.js",
+    "demo": "node src/server.js --demo",
+    "auth": "node src/auth.js",
+    "copy-client": "node scripts/copy-client.mjs",
+    "bundle": "esbuild src/server.js --bundle --platform=node --format=cjs --target=node22 --outfile=build/app.cjs",
+    "prebuild": "npm run copy-client && npm run bundle",
+    "build:win": "npm run prebuild && pkg . --targets node22-win-x64 --output dist/rl-viewer-queue.exe && node scripts/pack-dist.mjs",
+    "build:mac": "npm run prebuild && pkg . --targets node22-macos-arm64 --output dist/rl-viewer-queue-mac && node scripts/pack-dist.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@googleapis/youtube": "^20.0.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "google-auth-library": "^9.15.0",
+    "socket.io": "^4.7.5"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.3.0",
+    "esbuild": "^0.28.0"
+  },
+  "pkg": {
+    "assets": [
+      "public/**/*"
+    ],
+    "targets": [
+      "node22-win-x64"
+    ],
+    "outputPath": "dist"
+  }
+}
