@@ -104,7 +104,7 @@
     .crow.mod .cname { color: color-mix(in srgb, var(--blue) 45%, #ffffff); }
 
     /* コメント（横流れ／弾幕） */
-    .ticker { position: relative; width: 100%; height: 150px; overflow: hidden; pointer-events: none; }
+    .ticker { position: relative; width: 100%; height: 60px; overflow: hidden; pointer-events: none; }
     .dm {
       position: absolute; left: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
       padding: 6px 14px; border-radius: 999px;
@@ -180,7 +180,11 @@
     let SET = null;
     let lastState = null;
     let comments = [];
-    let tickerLane = 0;
+    // 横流れ（1レーン・同じ高さ・待機停止対応）の状態
+    const TICKER_GAP = 26;
+    let lane = [];
+    let tickerRaf = null;
+    let tickerLastTs = 0;
 
     function avatarHtml(e) {
       if (e.photo) return `<img class="avatar" src="${e.photo}"/>`;
@@ -232,8 +236,8 @@
       el.scrollTop = el.scrollHeight;
     }
 
-    // コメント：横流れ（弾幕）
-    function spawnTicker(c) {
+    // コメント：横流れ（1レーン／同じ高さ／後続が無ければ画面上で停止して待機）
+    function enqueueTicker(c) {
       if (!SET || SET.comments.mode !== "ticker" || !SET.comments.show) return;
       if (VIEW !== "all" && VIEW !== "comments") return;
       const ticker = $("ticker");
@@ -242,18 +246,54 @@
       const photo = SET.comments.showPhoto ? avatarHtml(c) : "";
       el.innerHTML = `${photo}<span class="cname">${esc(c.name)}</span><span class="ctext">${esc(c.text)}</span>`;
       ticker.appendChild(el);
+      const w = el.offsetWidth;
       const W = ticker.clientWidth || window.innerWidth;
-      const ew = el.offsetWidth;
-      const rowH = 38;
-      const lanes = Math.max(1, Math.floor((ticker.clientHeight || 150) / rowH));
-      const lane = tickerLane % lanes; tickerLane++;
-      el.style.top = lane * rowH + "px";
-      const dur = (SET.comments.speed || 12) * 1000;
-      const anim = el.animate(
-        [{ transform: `translateX(${W}px)` }, { transform: `translateX(${-ew}px)` }],
-        { duration: dur, easing: "linear" }
-      );
-      anim.onfinish = () => el.remove();
+      // 直前の要素に重ならない位置から開始（詰まっていれば画面右の外で順番待ち）
+      const prev = lane[lane.length - 1];
+      const startX = prev ? Math.max(W, prev.x + prev.w + TICKER_GAP) : W;
+      el.style.top = Math.max(0, (ticker.clientHeight - el.offsetHeight) / 2) + "px";
+      el.style.transform = `translateX(${startX}px)`;
+      lane.push({ el, x: startX, w });
+      if (tickerRaf == null) { tickerLastTs = performance.now(); tickerRaf = requestAnimationFrame(tickerStep); }
+    }
+
+    function tickerStep(now) {
+      const ticker = $("ticker");
+      const W = ticker.clientWidth || window.innerWidth;
+      const dt = Math.min(50, now - tickerLastTs); tickerLastTs = now;
+      const sec = (SET && SET.comments.speed) || 12;
+      const v = W / (sec * 1000); // px/ms（画面端→端を sec 秒で）
+      const restX = 12; // 停止位置（左端）
+      let moved = false;
+      for (let i = 0; i < lane.length; i++) {
+        const c = lane[i];
+        const before = c.x;
+        let nx = c.x - v * dt;
+        // 前(左)の要素に重ならない
+        if (i > 0) {
+          const ahead = lane[i - 1];
+          const minByAhead = ahead.x + ahead.w + TICKER_GAP;
+          if (nx < minByAhead) nx = minByAhead;
+        }
+        // 後続が無い最新コメントは画面上で停止して待機
+        if (i === lane.length - 1 && nx < restX) nx = restX;
+        c.x = nx;
+        c.el.style.transform = `translateX(${nx}px)`;
+        if (Math.abs(nx - before) > 0.05) moved = true;
+      }
+      // 左に流れ切った先頭を削除
+      while (lane.length && lane[0].x + lane[0].w < -4) {
+        lane[0].el.remove();
+        lane.shift();
+      }
+      // 全員停止（＝待機中）ならループを止め、次のコメントで再開
+      tickerRaf = lane.length && moved ? requestAnimationFrame(tickerStep) : null;
+    }
+
+    function stopTicker() {
+      if (tickerRaf != null) { cancelAnimationFrame(tickerRaf); tickerRaf = null; }
+      lane.forEach((c) => c.el.remove());
+      lane = [];
     }
 
     function applySettings(s) {
@@ -287,8 +327,8 @@
         w.style.transform = "none"; w.style.transformOrigin = "top left";
         w.style.width = tickerOnly ? "100%" : s.width + "px";
       }
-      // 横流れの単独表示は画面いっぱいの高さに
-      $("ticker").style.height = tickerOnly ? "100vh" : "150px";
+      // 横流れ：単独表示は画面全体の高さ（中央を1行で流す）、全部入りでは下部に1行ぶんの帯
+      $("ticker").style.height = tickerOnly ? "100vh" : "60px";
 
       // ラベル
       $("labelBlue").textContent = s.labels.blue;
@@ -325,7 +365,9 @@
       // コメント：モードに応じて一覧 or 横流れ
       const commentsVisible = want("comments");
       $("panelComments").classList.toggle("hidden", !(commentsVisible && cmode === "list"));
-      $("ticker").classList.toggle("hidden", !(commentsVisible && cmode === "ticker"));
+      const tickerVisible = commentsVisible && cmode === "ticker";
+      $("ticker").classList.toggle("hidden", !tickerVisible);
+      if (!tickerVisible) stopTicker(); // 横流れ以外に切り替えたら停止・掃除
 
       document.body.classList.toggle("no-avatars", !show.avatars);
       document.body.classList.toggle("no-numbers", !show.numbers);
@@ -339,7 +381,7 @@
     socket.on("comment", (c) => {
       comments.push(c);
       if (comments.length > 60) comments.shift();
-      if (SET && SET.comments.mode === "ticker") spawnTicker(c);
+      if (SET && SET.comments.mode === "ticker") enqueueTicker(c);
       else renderCommentList();
     });
     socket.on("joined", () => {
