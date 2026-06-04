@@ -58,14 +58,18 @@
     .cmt-list { list-style: none; padding: 6px; height: 100%; overflow: hidden; }
     .crow { display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px; margin: 3px 0;
       background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.05); border-radius: 8px; animation: slideIn .28s ease; }
-    .crow .cname { font-size: calc(var(--cf) * .72); font-weight: 800; opacity: .75; display: block; }
+    .crow > div { min-width: 0; }
+    .crow .avatar, .dm .avatar { width: calc(var(--cf) * 1.5); height: calc(var(--cf) * 1.5); border-radius: 50%;
+      object-fit: cover; flex: none; overflow: hidden; background: rgba(255,255,255,.14);
+      display: inline-flex; align-items: center; justify-content: center; font-weight: 800; font-size: calc(var(--cf) * .8); }
+    .crow .cname { font-size: calc(var(--cf) * .72); font-weight: 800; opacity: .85; display: block; color: var(--cname, currentColor); }
     .crow .ctext { font-size: var(--cf); font-weight: 600; word-break: break-word; line-height: 1.35; }
     .crow.owner .cname { color: #ffd24a; }
     .cmt-ticker { position: relative; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
     .dm { position: absolute; left: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
       padding: 5px 14px; border-radius: 999px; background: rgba(10,12,20,.66); border: 1px solid rgba(255,255,255,.1);
       box-shadow: 0 3px 12px rgba(0,0,0,.4); will-change: transform; font-weight: 700; font-size: var(--cf); }
-    .dm .cname { font-size: calc(var(--cf) * .75); opacity: .75; font-weight: 800; }
+    .dm .cname { font-size: calc(var(--cf) * .75); opacity: .85; font-weight: 800; color: var(--cname, currentColor); }
     .dm.owner { border-color: rgba(255,210,74,.5); }
     .dm.owner .cname { color: #ffd24a; }
 
@@ -89,6 +93,12 @@
     const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("ja-JP"));
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const hexToRgba = (hex, a) => {
+      const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+      if (!m) return hex || `rgba(17,20,33,${a})`;
+      const n = parseInt(m[1], 16);
+      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+    };
 
     // 縮小表示（ウィンドウに合わせる。OBSの1920x1080では等倍）。
     function fit() {
@@ -240,6 +250,7 @@
         case "comments": {
           el.dataset.kind = "comments";
           el.style.setProperty("--cf", (st.fontSize || 18) + "px");
+          el.style.setProperty("--cname", st.accent || "#9fd0ff");
           el.style.color = st.color || "#fff";
           panelBg(el, st);
           const box = new CommentBox(el, cf, st);
@@ -255,7 +266,9 @@
 
     function panelBg(el, st) {
       const a = (st.bgOpacity == null ? 90 : st.bgOpacity) / 100;
-      el.style.background = `linear-gradient(180deg, rgba(17,20,33,${a}), rgba(11,13,22,${a}))`;
+      el.style.background = st.bgColor
+        ? hexToRgba(st.bgColor, a)
+        : `linear-gradient(180deg, rgba(17,20,33,${a}), rgba(11,13,22,${a}))`;
       el.style.borderRadius = (st.radius || 12) + "px";
       el.style.border = "1px solid rgba(255,255,255,.08)";
     }
@@ -345,7 +358,8 @@
       _enqueue(c) {
         const el = document.createElement("div");
         el.className = "dm" + (c.isOwner ? " owner" : "");
-        const photo = this.cfg.showPhoto && c.photo ? `<img class="avatar" style="width:1.4em;height:1.4em;border-radius:50%" src="${c.photo}"/>` : "";
+        const ch = (c.name || "?").trim().charAt(0).toUpperCase() || "?";
+        const photo = this.cfg.showPhoto ? (c.photo ? `<img class="avatar" src="${c.photo}"/>` : `<div class="avatar">${esc(ch)}</div>`) : "";
         el.innerHTML = `${photo}<span class="cname">${esc(c.name)}</span><span class="ctext">${esc(c.text)}</span>`;
         this.inner.appendChild(el);
         const w = el.offsetWidth;

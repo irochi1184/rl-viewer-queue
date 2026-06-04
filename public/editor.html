@@ -385,7 +385,9 @@
           return selF("表示形式", "config.mode", c.mode || "list", [["list", "縦の一覧"], ["ticker", "横に流れる"]])
             + rngF("一覧の件数", "config.max", c.max || 8, 3, 20) + rngF("流れる速さ(秒)", "config.speed", c.speed || 12, 5, 30)
             + rngF("文字サイズ", "style.fontSize", s.fontSize || 18, 12, 80) + chkF("アイコン", "config.showPhoto", c.showPhoto !== false)
-            + rngF("背景の不透明度", "style.bgOpacity", s.bgOpacity ?? 85, 0, 100) + rngF("角丸", "style.radius", s.radius || 12, 0, 40);
+            + colF("文字色", "style.color", s.color || "#ffffff") + colF("名前の色", "style.accent", s.accent || "#9fd0ff")
+            + colF("背景色", "style.bgColor", s.bgColor || "#11141f") + rngF("背景の不透明度", "style.bgOpacity", s.bgOpacity ?? 85, 0, 100)
+            + rngF("角丸", "style.radius", s.radius || 12, 0, 40);
       }
       return "";
     }
