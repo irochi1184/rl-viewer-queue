@@ -64,6 +64,44 @@ export const DEFAULT_DATA = {
   scenes: [defaultScene()],
 };
 
+// カラーパレット（適用すると背景・各部品の色を一括変更）。
+export const PALETTES = {
+  rl:     { label: "RL クラシック", bg: "#0b0e16", text: "#ffffff", accent: "#5cffc9", blue: "#1e6bff", orange: "#ff7a18" },
+  neon:   { label: "ネオン",        bg: "#0a0612", text: "#ffffff", accent: "#19e6ff", blue: "#7b5cff", orange: "#ff3ca6" },
+  sunset: { label: "サンセット",    bg: "#170d1c", text: "#fff7ed", accent: "#ffb020", blue: "#3b82f6", orange: "#f97316" },
+  mono:   { label: "モノクロ",      bg: "#0e0e10", text: "#ffffff", accent: "#c9ccd6", blue: "#5b6b9c", orange: "#9aa0ad" },
+};
+
+// 完成レイアウトのテンプレート（適用するとアクティブシーンを置き換え）。
+export const TEMPLATES = {
+  match: { label: "試合中", build: () => ({ background: { type: "color", color: "#0b0e16" }, widgets: defaultScene().widgets }) },
+  recruit: {
+    label: "参加募集",
+    build: () => ({
+      background: { type: "gradient", gradient: "linear-gradient(135deg,#10203a,#0b0e16)" },
+      widgets: [
+        { type: "text", x: 80, y: 56, w: 1100, h: 100, z: 2, style: { color: "#ffffff", fontSize: 64, fontWeight: 900, align: "left", bg: "transparent" }, config: { text: "参加者 募集中！" } },
+        { type: "text", x: 80, y: 168, w: 1180, h: 60, z: 2, style: { color: "#5cffc9", fontSize: 32, fontWeight: 800, align: "left", bg: "transparent" }, config: { text: "コメントで「参加希望」と送ってね！" } },
+        { type: "stats", x: 1360, y: 56, w: 480, h: 110, z: 2, style: { accent: "#5cffc9", bgOpacity: 90, radius: 14 }, config: { showSubs: true, showViewers: true } },
+        { type: "participants", x: 80, y: 264, w: 820, h: 760, z: 2, style: { blue: "#1e6bff", orange: "#ff7a18", accent: "#5cffc9", bgOpacity: 90, radius: 14 }, config: { show: "queue", showAvatars: true, showNumbers: true, showEmpty: false } },
+        { type: "comments", x: 940, y: 200, w: 900, h: 824, z: 2, style: { accent: "#5cffc9", bgOpacity: 85, radius: 14, fontSize: 22 }, config: { mode: "list", max: 16, speed: 12, showPhoto: true } },
+      ],
+    }),
+  },
+  starting: {
+    label: "開始前 (Starting Soon)",
+    build: () => ({
+      background: { type: "gradient", gradient: "radial-gradient(120% 120% at 50% 0%,#16243f,#080a12)" },
+      widgets: [
+        { type: "text", x: 260, y: 360, w: 1400, h: 140, z: 2, style: { color: "#ffffff", fontSize: 96, fontWeight: 900, align: "center", bg: "transparent" }, config: { text: "まもなく開始します" } },
+        { type: "text", x: 260, y: 520, w: 1400, h: 70, z: 2, style: { color: "#5cffc9", fontSize: 40, fontWeight: 800, align: "center", bg: "transparent" }, config: { text: "Starting Soon..." } },
+        { type: "cameraFrame", x: 1456, y: 736, w: 400, h: 288, z: 3, style: { borderWidth: 3, borderColor: "#5cffc9", radius: 14, shadow: true }, config: { showLabel: true, label: "CAM" } },
+        { type: "comments", x: 0, y: 992, w: 1920, h: 88, z: 2, style: { accent: "#5cffc9", bgOpacity: 70, radius: 0, fontSize: 28 }, config: { mode: "ticker", speed: 14, showPhoto: true } },
+      ],
+    }),
+  },
+};
+
 export class SceneStore extends EventEmitter {
   constructor() {
     super();
@@ -196,6 +234,55 @@ export class SceneStore extends EventEmitter {
       const w = s.widgets.find((x) => x.id === id);
       if (w) w.z = i + 1;
     });
+    this._changed();
+  }
+
+  // テンプレートをアクティブシーンに適用（背景・部品を置き換え。名前/IDは維持）。
+  applyTemplate(name) {
+    const t = TEMPLATES[name];
+    if (!t) return;
+    const built = t.build();
+    const s = this.getActive();
+    if (!s) return;
+    s.background = clone(built.background);
+    s.widgets = built.widgets.map((w, i) => ({ ...clone(w), id: "w-" + randomUUID().slice(0, 8), z: w.z ?? i + 1 }));
+    this._changed();
+  }
+
+  // テンプレートから新しいシーンを作成して切り替え。
+  createFromTemplate(name) {
+    const t = TEMPLATES[name];
+    if (!t) return null;
+    const built = t.build();
+    const s = {
+      id: "s-" + randomUUID().slice(0, 8),
+      name: t.label,
+      canvas: { ...CANVAS },
+      background: clone(built.background),
+      widgets: built.widgets.map((w, i) => ({ ...clone(w), id: "w-" + randomUUID().slice(0, 8), z: w.z ?? i + 1 })),
+    };
+    this.data.scenes.push(s);
+    this.data.activeId = s.id;
+    this._changed();
+    return s.id;
+  }
+
+  // カラーパレットをアクティブシーンに適用（背景色＋各部品の色を一括変更）。
+  applyPalette(name) {
+    const p = PALETTES[name];
+    if (!p) return;
+    const s = this.getActive();
+    if (!s) return;
+    if (!s.background) s.background = {};
+    if (s.background.type !== "image") { s.background.type = "color"; s.background.color = p.bg; }
+    for (const w of s.widgets) {
+      const st = w.style || (w.style = {});
+      if (w.type === "text") st.color = p.text;
+      else if (w.type === "stats") st.accent = p.accent;
+      else if (w.type === "participants") { st.blue = p.blue; st.orange = p.orange; st.accent = p.accent; }
+      else if (w.type === "comments") st.accent = p.accent;
+      else if (w.type === "gameFrame" || w.type === "cameraFrame") st.borderColor = p.accent;
+    }
     this._changed();
   }
 

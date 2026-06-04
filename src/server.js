@@ -2,9 +2,10 @@
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
+import { randomUUID } from "node:crypto";
 import express from "express";
 import { Server as SocketServer } from "socket.io";
-import { publicDir } from "./paths.js"; // dotenv はここで読み込まれる
+import { publicDir, dataDir } from "./paths.js"; // dotenv はここで読み込まれる
 
 import { getAuthorizedClient } from "./auth.js";
 import { YouTubeMonitor } from "./youtube.js";
@@ -57,6 +58,29 @@ const MIME = {
   ".svg": "image/svg+xml",
 };
 app.get("/", (_req, res) => res.redirect("/admin.html"));
+
+// --- 画像アップロード（ロゴ・背景など）。保存先は exe の隣の data/assets ---
+const assetsDir = path.join(dataDir, "assets");
+fs.mkdirSync(assetsDir, { recursive: true });
+app.post("/upload", express.raw({ type: () => true, limit: "25mb" }), (req, res) => {
+  if (!Buffer.isBuffer(req.body) || req.body.length === 0) return res.status(400).json({ error: "empty" });
+  const ct = (req.headers["content-type"] || "").toLowerCase();
+  const ext = ct.includes("png") ? "png" : (ct.includes("jpeg") || ct.includes("jpg")) ? "jpg"
+    : ct.includes("gif") ? "gif" : ct.includes("svg") ? "svg" : ct.includes("webp") ? "webp" : "bin";
+  const name = "a-" + randomUUID().slice(0, 8) + "." + ext;
+  try { fs.writeFileSync(path.join(assetsDir, name), req.body); }
+  catch (e) { return res.status(500).json({ error: e.message }); }
+  res.json({ url: "/assets/" + name });
+});
+app.get("/assets/:file", (req, res) => {
+  const safe = path.basename(req.params.file);
+  const p = path.join(assetsDir, safe);
+  try {
+    const buf = fs.readFileSync(p);
+    res.type(MIME[path.extname(safe).toLowerCase()] || "application/octet-stream").send(buf);
+  } catch { res.status(404).send("not found"); }
+});
+
 // public/ 配下のファイルを安全に配信（exe化のスナップショットからも fs で読む）。
 app.get(/.+/, (req, res, next) => {
   if (req.method !== "GET") return next();
@@ -129,6 +153,9 @@ io.on("connection", (socket) => {
   socket.on("widget:upsert", ({ sceneId, widget } = {}) => scenes.upsertWidget(sceneId, widget));
   socket.on("widget:remove", ({ sceneId, widgetId } = {}) => scenes.removeWidget(sceneId, widgetId));
   socket.on("widget:reorder", ({ sceneId, ids } = {}) => scenes.reorderWidgets(sceneId, ids));
+  socket.on("scene:applyTemplate", (name) => scenes.applyTemplate(name));
+  socket.on("scene:newFromTemplate", (name) => scenes.createFromTemplate(name));
+  socket.on("scene:applyPalette", (name) => scenes.applyPalette(name));
 });
 
 queue.on("change", () => broadcast());

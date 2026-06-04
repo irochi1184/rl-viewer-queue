@@ -97,6 +97,16 @@
       <button data-add="comments">💬 コメント</button>
     </div>
 
+    <h2>テンプレートから新規シーン</h2>
+    <div class="btnrow" id="tpl"></div>
+
+    <h2>カラー（現在のシーンに適用）</h2>
+    <div class="palette" id="palettes"></div>
+
+    <h2>装飾・画像</h2>
+    <div class="palette" id="decos"></div>
+    <button class="ghost sm" id="upBtn" style="margin-top:6px; width:100%">画像をアップロードして追加</button>
+
     <h2>レイヤー（上=手前）</h2>
     <ul class="layers" id="layers"></ul>
 
@@ -313,7 +323,7 @@
     function colF(label, path, v) { return `<label class="fld">${label}</label><input type="color" data-p="${path}" value="${v || "#ffffff"}">`; }
     function rngF(label, path, v, min, max) { return `<label class="fld">${label}: <span class="rv">${v}</span></label><input type="range" data-p="${path}" min="${min}" max="${max}" value="${v}">`; }
     function chkF(label, path, v) { return `<label class="chk"><input type="checkbox" data-p="${path}" ${v ? "checked" : ""}>${label}</label>`; }
-    function selF(label, path, v, opts) { return `<label class="fld">${label}</label><select data-p="${path}">${opts.map((o) => `<option value="${o[0]}" ${o[0] === v ? "selected" : ""}>${o[1]}</option>`).join("")}</select>`; }
+    function selF(label, path, v, opts) { return `<label class="fld">${label}</label><select data-p="${path}">${opts.map((o) => `<option value="${escapeAttr(o[0])}" ${o[0] === v ? "selected" : ""}>${o[1]}</option>`).join("")}</select>`; }
 
     function typeInspector(w) {
       const s = w.style || {}, c = w.config || {};
@@ -321,6 +331,7 @@
         case "text":
           return areaF("テキスト", "config.text", c.text) + rngF("文字サイズ", "style.fontSize", s.fontSize || 28, 12, 120)
             + selF("太さ", "style.fontWeight", String(s.fontWeight || 700), [["400", "標準"], ["700", "太字"], ["800", "極太"], ["900", "最太"]])
+            + selF("フォント", "style.fontFamily", s.fontFamily || "", [["", "標準"], ['"Arial Black","Hiragino Sans",sans-serif', "極太(Arial Black)"], ['"Hiragino Maru Gothic ProN","Yu Gothic",sans-serif', "丸ゴシック"], ['Georgia,"Hiragino Mincho ProN",serif', "明朝/セリフ"], ['Impact,"Hiragino Sans",sans-serif', "Impact"]])
             + selF("揃え", "style.align", s.align || "left", [["left", "左"], ["center", "中央"], ["right", "右"]])
             + colF("文字色", "style.color", s.color) + txtF("背景(色/transparent)", "style.bg", s.bg);
         case "gameFrame": case "cameraFrame":
@@ -331,7 +342,8 @@
           return txtF("背景(色/グラデ)", "style.bg", s.bg) + rngF("角丸", "style.radius", s.radius || 12, 0, 60)
             + rngF("枠の太さ", "style.borderWidth", s.borderWidth || 0, 0, 12) + colF("枠の色", "style.borderColor", s.borderColor) + chkF("影をつける", "style.shadow", s.shadow);
         case "image":
-          return txtF("画像URL", "config.src", c.src) + selF("フィット", "config.fit", c.fit || "contain", [["contain", "全体表示"], ["cover", "切り抜き"], ["fill", "引き伸ばし"]]) + rngF("角丸", "style.radius", s.radius || 0, 0, 60);
+          return txtF("画像URL", "config.src", c.src) + `<button class="ghost sm" id="upImg" style="width:100%;margin-top:6px">画像をアップロード</button>`
+            + selF("フィット", "config.fit", c.fit || "contain", [["contain", "全体表示"], ["cover", "切り抜き"], ["fill", "引き伸ばし"]]) + rngF("角丸", "style.radius", s.radius || 0, 0, 60);
         case "stats":
           return chkF("登録者数", "config.showSubs", c.showSubs !== false) + chkF("同時視聴者数", "config.showViewers", c.showViewers !== false)
             + colF("アクセント色", "style.accent", s.accent) + rngF("背景の不透明度", "style.bgOpacity", s.bgOpacity ?? 90, 0, 100) + rngF("角丸", "style.radius", s.radius || 12, 0, 40);
@@ -363,6 +375,8 @@
         });
       });
       $("delW").onclick = () => { socket.emit("widget:remove", { sceneId: activeId, widgetId: w.id }); selectedId = null; };
+      const up = $("upImg");
+      if (up) up.onclick = () => pickAndUpload((url) => emitWidget({ id: w.id, config: { src: url } }));
     }
 
     function sceneInspector() {
@@ -372,6 +386,7 @@
         ${colF("背景色", "background.color", b.color || "#0b0e16")}
         ${txtF("グラデーションCSS", "background.gradient", b.gradient)}
         ${txtF("画像URL", "background.image", b.image)}
+        <button class="ghost sm" id="upBg" style="width:100%;margin-top:6px">背景画像をアップロード</button>
         <div class="muted" style="margin-top:14px">部品を選ぶと、ここで色・サイズ・内容を編集できます。</div>`;
     }
     function bindSceneInspector() {
@@ -379,6 +394,42 @@
         const v = el.type === "checkbox" ? el.checked : el.value;
         emitScene(pathToObj(el.dataset.p, v));
       }));
+      const up = $("upBg");
+      if (up) up.onclick = () => pickAndUpload((url) => emitScene({ background: { type: "image", image: url } }));
+    }
+
+    // ---- テンプレート / カラー / 装飾 / アップロード ----
+    const TPLS = [["match", "🎮 試合中"], ["recruit", "📣 参加募集"], ["starting", "⏳ 開始前"]];
+    const PALS = [["rl", "RL", "#5cffc9"], ["neon", "ネオン", "#19e6ff"], ["sunset", "夕焼け", "#ffb020"], ["mono", "モノ", "#c9ccd6"]];
+    const DECOS = [["/assets/deco-corner.svg", "コーナー", 220, 220], ["/assets/deco-bar.svg", "下帯", 760, 120], ["/assets/deco-badge.svg", "バッジ", 200, 220]];
+
+    $("tpl").innerHTML = TPLS.map(([k, l]) => `<button class="ghost sm" data-tpl="${k}">${l}</button>`).join("");
+    $("tpl").addEventListener("click", (e) => { const k = e.target.dataset.tpl; if (k) socket.emit("scene:newFromTemplate", k); });
+
+    $("palettes").innerHTML = PALS.map(([k, l, c]) =>
+      `<button data-pal="${k}" style="display:flex;align-items:center;gap:6px;justify-content:center"><span style="width:12px;height:12px;border-radius:3px;background:${c}"></span>${l}</button>`).join("");
+    $("palettes").addEventListener("click", (e) => { const b = e.target.closest("[data-pal]"); if (b) socket.emit("scene:applyPalette", b.dataset.pal); });
+
+    $("decos").innerHTML = DECOS.map(([src, l]) => `<button data-deco="${src}">${l}</button>`).join("");
+    $("decos").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-deco]"); if (!b) return;
+      const d = DECOS.find((x) => x[0] === b.dataset.deco);
+      socket.emit("widget:upsert", { sceneId: activeId, widget: { type: "image", x: 60, y: 60, w: d[2], h: d[3], style: { radius: 0 }, config: { src: d[0], fit: "contain" } } });
+    });
+
+    $("upBtn").onclick = () => pickAndUpload((url) =>
+      socket.emit("widget:upsert", { sceneId: activeId, widget: { type: "image", x: 760, y: 440, w: 400, h: 225, style: { radius: 8 }, config: { src: url, fit: "contain" } } }));
+
+    async function uploadFile(file) {
+      const res = await fetch("/upload", { method: "POST", headers: { "Content-Type": file.type || "application/octet-stream" }, body: file });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      return (await res.json()).url;
+    }
+    function pickAndUpload(cb) {
+      const inp = document.createElement("input");
+      inp.type = "file"; inp.accept = "image/*";
+      inp.onchange = async () => { const f = inp.files[0]; if (!f) return; try { cb(await uploadFile(f)); } catch (e) { alert("アップロード失敗: " + e.message); } };
+      inp.click();
     }
 
     // ---- helpers ----

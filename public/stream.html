@@ -185,6 +185,7 @@
           t.style.fontSize = (st.fontSize || 28) + "px";
           t.style.fontWeight = st.fontWeight || 700;
           t.style.textAlign = st.align || "left";
+          if (st.fontFamily) t.style.fontFamily = st.fontFamily;
           t.textContent = cf.text || "";
           el.appendChild(t);
           break;
