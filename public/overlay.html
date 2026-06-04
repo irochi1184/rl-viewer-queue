@@ -13,6 +13,7 @@
       --accent: #2b6cff;
       --radius: 16px;
       --panel-alpha: 0.92;
+      --comment-size: 16px;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -97,9 +98,9 @@
       border-radius: 9px; animation: slideIn .28s ease;
     }
     .crow .cbody { min-width: 0; }
-    .crow .cname { font-size: 11px; font-weight: 800; opacity: .7;
+    .crow .cname { font-size: calc(var(--comment-size) * 0.72); font-weight: 800; opacity: .7;
       color: color-mix(in srgb, var(--accent) 40%, #ffffff); display: block; }
-    .crow .ctext { font-size: 14px; font-weight: 600; word-break: break-word; line-height: 1.35; }
+    .crow .ctext { font-size: var(--comment-size); font-weight: 600; word-break: break-word; line-height: 1.35; }
     .crow.owner .cname { color: #ffd24a; }
     .crow.mod .cname { color: color-mix(in srgb, var(--blue) 45%, #ffffff); }
 
@@ -110,9 +111,9 @@
       padding: 6px 14px; border-radius: 999px;
       background: rgba(10,12,20,.66); border: 1px solid rgba(255,255,255,.1);
       box-shadow: 0 3px 12px rgba(0,0,0,.4); will-change: transform;
-      font-weight: 700; font-size: 16px; backdrop-filter: blur(2px);
+      font-weight: 700; font-size: var(--comment-size); backdrop-filter: blur(2px);
     }
-    .dm .cname { font-size: 12px; opacity: .7; font-weight: 800;
+    .dm .cname { font-size: calc(var(--comment-size) * 0.75); opacity: .7; font-weight: 800;
       color: color-mix(in srgb, var(--accent) 40%, #ffffff); }
     .dm.owner { border-color: rgba(255,210,74,.5); }
     .dm.owner .cname { color: #ffd24a; }
@@ -306,6 +307,8 @@
       root.setProperty("--accent", s.accentColor);
       root.setProperty("--radius", s.radius + "px");
       root.setProperty("--panel-alpha", (s.bgOpacity / 100).toString());
+      const cfont = (s.comments && s.comments.fontSize) || 16;
+      root.setProperty("--comment-size", cfont + "px");
 
       const w = $("wrap");
       w.style.top = w.style.bottom = w.style.left = w.style.right = "auto";
@@ -327,8 +330,8 @@
         w.style.transform = "none"; w.style.transformOrigin = "top left";
         w.style.width = tickerOnly ? "100%" : s.width + "px";
       }
-      // 横流れ：単独表示は画面全体の高さ（中央を1行で流す）、全部入りでは下部に1行ぶんの帯
-      $("ticker").style.height = tickerOnly ? "100vh" : "60px";
+      // 横流れ：単独表示は画面全体の高さ（中央を1行で流す）、全部入りでは文字サイズに応じた帯
+      $("ticker").style.height = tickerOnly ? "100vh" : Math.max(60, Math.round(cfont * 2.6)) + "px";
 
       // ラベル
       $("labelBlue").textContent = s.labels.blue;

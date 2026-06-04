@@ -1,0 +1,14 @@
+# Windows / Mac 併用での改行コード差分を防ぐ。
+# テキストは常に LF に正規化（チェックアウト時もLF）。
+* text=auto eol=lf
+
+# バイナリ・生成物は変換しない
+*.exe   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.min.js -text

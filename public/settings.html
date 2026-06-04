@@ -101,6 +101,7 @@
           <label class="check"><input type="checkbox" data-path="show.avatars">アイコン画像</label>
           <label class="check"><input type="checkbox" data-path="show.numbers">順番の番号</label>
           <label class="check"><input type="checkbox" data-path="show.emptySlots">空きスロット</label>
+          <label class="check"><input type="checkbox" data-path="comments.show">コメント</label>
         </div>
       </div>
 
@@ -122,8 +123,10 @@
         </div>
         <div class="row"><label>一覧の表示件数</label><input type="range" id="cmax" min="3" max="20" data-path="comments.max" data-unit="件"><span class="val" id="cmaxv"></span></div>
         <div class="row"><label>流れる速さ</label><input type="range" id="cspeed" min="5" max="30" data-path="comments.speed" data-unit="秒"><span class="val" id="cspeedv"></span></div>
+        <div class="row"><label>文字サイズ</label><input type="range" id="cfont" min="12" max="80" data-path="comments.fontSize" data-unit="px"><span class="val" id="cfontv"></span></div>
         <div class="row"><label>アイコン表示</label><label class="check"><input type="checkbox" data-path="comments.showPhoto"></label></div>
         <div class="hint">「縦の一覧」は新しいコメントが下に積まれます。「横に流れる」はニコニコ風に右→左へ流れます（コメント単独ウィンドウなら画面全体に流せます）。</div>
+        <div class="hint">※コメント単独ウィンドウ(<code>?view=comments</code>)が小さい・OBSで拡大すると荒れる場合は、OBS側で引き伸ばさず「文字サイズ」を大きくしてください。ブラウザソースのサイズは表示したい大きさ（例:1920×300）に設定すると常にくっきり表示されます。</div>
       </div>
 
       <div class="card">

@@ -9,21 +9,21 @@ const SETTINGS_PATH = path.join(dataDir, "overlay-settings.json");
 
 // 既定の見た目設定。
 export const DEFAULT_SETTINGS = {
-  position: "top-right", // top-left | top-right | bottom-left | bottom-right
+  position: "top-left", // top-left | top-right | bottom-left | bottom-right
   offsetX: 24,
   offsetY: 24,
-  width: 340, // px
-  scale: 100, // %
-  radius: 16, // px
-  bgOpacity: 92, // パネル背景の不透明度 %
+  width: 223, // px
+  scale: 142, // %
+  radius: 12, // px
+  bgOpacity: 97, // パネル背景の不透明度 %
   textColor: "#ffffff",
   blueColor: "#1e6bff",
   orangeColor: "#ff7a18",
-  accentColor: "#2b6cff", // 統計バー・待機列ヘッダー
+  accentColor: "#5cffc9", // 統計バー・待機列ヘッダー
   labels: {
-    blue: "青チーム",
+    blue: "ブルーチーム",
     orange: "オレンジチーム",
-    waiting: "参加希望（待機列）",
+    waiting: "参加希望",
   },
   show: {
     subs: true,
@@ -34,14 +34,15 @@ export const DEFAULT_SETTINGS = {
     vs: true,
     avatars: true,
     numbers: true,
-    emptySlots: true,
+    emptySlots: false,
   },
   // コメント表示
   comments: {
     show: true,
-    mode: "list", // "list"（縦一覧）| "ticker"（横に流れる）
+    mode: "ticker", // "list"（縦一覧）| "ticker"（横に流れる）
     max: 8, // 縦一覧での表示件数
     speed: 12, // 横流れ1コメントが流れ切る秒数
+    fontSize: 16, // コメント文字サイズ(px)。単独ウィンドウはここを大きくして高画質に
     showPhoto: true, // アイコン表示
   },
 };
