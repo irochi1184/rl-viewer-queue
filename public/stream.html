@@ -118,15 +118,13 @@
       // 背景
       const bg = $("bg");
       const b = scene.background || {};
-      if (b.type === "image" && b.image) {
-        bg.style.background = `#000 url("${b.image}") center/${b.fit || "cover"} no-repeat`;
-      } else if (b.type === "gradient") {
-        bg.style.background = b.gradient || "linear-gradient(135deg,#10141f,#0b0e16)";
-      } else if (b.type === "color") {
-        bg.style.background = b.color || "#0b0e16";
-      } else {
-        bg.style.background = "transparent";
-      }
+      let bgVal;
+      if (b.css) bgVal = b.css; // プリセット/カスタムCSS（最優先）
+      else if (b.type === "image" && b.image) bgVal = `#000 url("${b.image}") center/${b.fit || "cover"} no-repeat`;
+      else if (b.type === "gradient") bgVal = b.gradient || "linear-gradient(135deg,#10141f,#0b0e16)";
+      else if (b.type === "color") bgVal = b.color || "#0b0e16";
+      else bgVal = "transparent";
+      bg.style.background = bgVal;
 
       // ゲーム枠／カメラ枠の位置に背景の穴をあける（SVGマスク）
       const frames = (scene.widgets || []).filter((w) => w.type === "gameFrame" || w.type === "cameraFrame");
@@ -166,7 +164,8 @@
           el.style.borderWidth = (st.borderWidth ?? 3) + "px";
           el.style.borderColor = st.borderColor || "#1e6bff";
           el.style.borderRadius = (st.radius || 0) + "px";
-          if (st.shadow) el.style.boxShadow = "0 0 0 1px rgba(0,0,0,.4), 0 14px 40px rgba(0,0,0,.5)";
+          if (st.glow) { const c = st.borderColor || "#1e6bff"; el.style.boxShadow = `0 0 8px ${c}, 0 0 22px ${c}, inset 0 0 12px ${c}55`; }
+          else if (st.shadow) el.style.boxShadow = "0 0 0 1px rgba(0,0,0,.4), 0 14px 40px rgba(0,0,0,.5)";
           if (cf.showLabel && cf.label) {
             const lab = document.createElement("div");
             lab.className = "frame-label";
@@ -186,6 +185,7 @@
           t.style.fontWeight = st.fontWeight || 700;
           t.style.textAlign = st.align || "left";
           if (st.fontFamily) t.style.fontFamily = st.fontFamily;
+          if (st.glow) { const c = st.color || "#fff"; t.style.textShadow = `0 0 6px ${c}, 0 0 16px ${c}, 0 0 32px ${c}`; }
           t.textContent = cf.text || "";
           el.appendChild(t);
           break;
@@ -194,7 +194,10 @@
           el.style.background = st.bg || "rgba(17,20,33,.85)";
           el.style.borderRadius = (st.radius || 12) + "px";
           if (st.borderWidth) { el.style.border = `${st.borderWidth}px solid ${st.borderColor || "rgba(255,255,255,.15)"}`; }
-          if (st.shadow) el.style.boxShadow = "0 14px 40px rgba(0,0,0,.45)";
+          if (st.glow && st.borderColor) el.style.boxShadow = `0 0 10px ${st.borderColor}, 0 0 26px ${st.borderColor}`;
+          else if (st.shadow) el.style.boxShadow = "0 14px 40px rgba(0,0,0,.45)";
+          if (st.blur) el.style.filter = `blur(${st.blur}px)`;
+          if (st.opacity != null) el.style.opacity = st.opacity > 1 ? st.opacity / 100 : st.opacity;
           break;
         }
         case "image": {

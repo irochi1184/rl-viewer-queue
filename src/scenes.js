@@ -274,7 +274,9 @@ export class SceneStore extends EventEmitter {
     const s = this.getActive();
     if (!s) return;
     if (!s.background) s.background = {};
-    if (s.background.type !== "image") { s.background.type = "color"; s.background.color = p.bg; }
+    // 単色背景のときだけ背景色も差し替える（グラデ/CSS/画像背景は壊さず、部品の色だけ変える）。
+    const bt = s.background.type;
+    if (!bt || bt === "color") { s.background.type = "color"; s.background.color = p.bg; }
     for (const w of s.widgets) {
       const st = w.style || (w.style = {});
       if (w.type === "text") st.color = p.text;

@@ -46,6 +46,10 @@
       stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
     #palette .ico { color: #9fb4ff; }
     .btnrow .ico { width: 15px; height: 15px; vertical-align: -3px; margin-right: 5px; }
+    .bggrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+    .bggrid button { height: 44px; border-radius: 8px; border: 1px solid #2a3658; cursor: pointer; padding: 0;
+      overflow: hidden; color: #fff; font-size: 10px; font-weight: 700; text-shadow: 0 1px 3px #000, 0 0 4px #000; }
+    .bggrid button:hover { outline: 2px solid #2b6cff; }
 
     .layers { list-style: none; padding: 0; margin: 0; }
     .layer { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 3px 0; border-radius: 7px;
@@ -97,6 +101,9 @@
 
     <h2>テンプレートから新規シーン</h2>
     <div class="btnrow" id="tpl"></div>
+
+    <h2>背景プリセット</h2>
+    <div class="bggrid" id="bgPresets"></div>
 
     <h2>カラー（現在のシーンに適用）</h2>
     <div class="palette" id="palettes"></div>
@@ -352,14 +359,16 @@
             + selF("太さ", "style.fontWeight", String(s.fontWeight || 700), [["400", "標準"], ["700", "太字"], ["800", "極太"], ["900", "最太"]])
             + selF("フォント", "style.fontFamily", s.fontFamily || "", [["", "標準"], ['"Arial Black","Hiragino Sans",sans-serif', "極太(Arial Black)"], ['"Hiragino Maru Gothic ProN","Yu Gothic",sans-serif', "丸ゴシック"], ['Georgia,"Hiragino Mincho ProN",serif', "明朝/セリフ"], ['Impact,"Hiragino Sans",sans-serif', "Impact"]])
             + selF("揃え", "style.align", s.align || "left", [["left", "左"], ["center", "中央"], ["right", "右"]])
-            + colF("文字色", "style.color", s.color) + txtF("背景(色/transparent)", "style.bg", s.bg);
+            + colF("文字色", "style.color", s.color) + chkF("発光(ネオン)", "style.glow", s.glow) + txtF("背景(色/transparent)", "style.bg", s.bg);
         case "gameFrame": case "cameraFrame":
           return rngF("枠の太さ", "style.borderWidth", s.borderWidth ?? 3, 0, 12) + colF("枠の色", "style.borderColor", s.borderColor)
-            + rngF("角丸", "style.radius", s.radius || 0, 0, 40) + chkF("影をつける", "style.shadow", s.shadow)
+            + rngF("角丸", "style.radius", s.radius || 0, 0, 40) + chkF("影をつける", "style.shadow", s.shadow) + chkF("発光(ネオン)", "style.glow", s.glow)
             + chkF("ラベルを表示", "config.showLabel", c.showLabel) + txtF("ラベル文字", "config.label", c.label);
         case "shape":
           return txtF("背景(色/グラデ)", "style.bg", s.bg) + rngF("角丸", "style.radius", s.radius || 12, 0, 60)
-            + rngF("枠の太さ", "style.borderWidth", s.borderWidth || 0, 0, 12) + colF("枠の色", "style.borderColor", s.borderColor) + chkF("影をつける", "style.shadow", s.shadow);
+            + rngF("ぼかし", "style.blur", s.blur || 0, 0, 60) + rngF("不透明度", "style.opacity", s.opacity ?? 100, 0, 100)
+            + rngF("枠の太さ", "style.borderWidth", s.borderWidth || 0, 0, 12) + colF("枠の色", "style.borderColor", s.borderColor)
+            + chkF("影をつける", "style.shadow", s.shadow) + chkF("発光(ネオン)", "style.glow", s.glow);
         case "image":
           return txtF("画像URL", "config.src", c.src) + `<button class="ghost sm" id="upImg" style="width:100%;margin-top:6px">画像をアップロード</button>`
             + selF("フィット", "config.fit", c.fit || "contain", [["contain", "全体表示"], ["cover", "切り抜き"], ["fill", "引き伸ばし"]]) + rngF("角丸", "style.radius", s.radius || 0, 0, 60);
@@ -401,9 +410,11 @@
     function sceneInspector() {
       const b = (scene && scene.background) || { type: "color", color: "#0b0e16" };
       return `<h2>背景（シーン共通）</h2>
-        ${selF("種類", "background.type", b.type || "color", [["color", "単色"], ["gradient", "グラデーション"], ["image", "画像"], ["transparent", "透明"]])}
+        <div class="muted" style="margin-bottom:6px">左の「背景プリセット」から選ぶのが簡単です。ここでは細かく指定できます。</div>
+        ${selF("種類", "background.type", b.type || "color", [["color", "単色"], ["gradient", "グラデーション"], ["css", "プリセット/CSS"], ["image", "画像"], ["transparent", "透明"]])}
         ${colF("背景色", "background.color", b.color || "#0b0e16")}
         ${txtF("グラデーションCSS", "background.gradient", b.gradient)}
+        ${areaF("背景CSS（上級）", "background.css", b.css)}
         ${txtF("画像URL", "background.image", b.image)}
         <button class="ghost sm" id="upBg" style="width:100%;margin-top:6px">背景画像をアップロード</button>
         <div class="muted" style="margin-top:14px">部品を選ぶと、ここで色・サイズ・内容を編集できます。</div>`;
@@ -411,7 +422,11 @@
     function bindSceneInspector() {
       $("inspector").querySelectorAll("[data-p]").forEach((el) => el.addEventListener("change", () => {
         const v = el.type === "checkbox" ? el.checked : el.value;
-        emitScene(pathToObj(el.dataset.p, v));
+        const p = el.dataset.p;
+        const patch = pathToObj(p, v);
+        // 単色/グラデ/画像/透明 に変えたら、プリセットCSS(最優先)を解除して反映されるようにする
+        if (p.startsWith("background.") && p !== "background.css" && !(p === "background.type" && v === "css")) patch.background.css = "";
+        emitScene(patch);
       }));
       const up = $("upBg");
       if (up) up.onclick = () => pickAndUpload((url) => emitScene({ background: { type: "image", image: url } }));
@@ -420,7 +435,38 @@
     // ---- テンプレート / カラー / 装飾 / アップロード ----
     const TPLS = [["match", "試合中", "gameFrame"], ["recruit", "参加募集", "megaphone"], ["starting", "開始前", "clock"]];
     const PALS = [["rl", "RL", "#5cffc9"], ["neon", "ネオン", "#19e6ff"], ["sunset", "夕焼け", "#ffb020"], ["mono", "モノ", "#c9ccd6"]];
-    const DECOS = [["/assets/deco-corner.svg", "コーナー", 220, 220], ["/assets/deco-bar.svg", "下帯", 760, 120], ["/assets/deco-badge.svg", "バッジ", 200, 220]];
+    // 背景プリセット（ネオン/グラデ/パターン）。クリックで現在シーンの背景CSSに適用。
+    const BG_PRESETS = [
+      ["ネオン紫", "radial-gradient(60% 80% at 20% 10%,#3a1d6e 0,transparent 60%),radial-gradient(50% 60% at 90% 20%,#6d2bb0 0,transparent 55%),linear-gradient(160deg,#140a24,#080612)"],
+      ["ネオン青", "radial-gradient(60% 80% at 15% 10%,#14346e 0,transparent 60%),radial-gradient(50% 60% at 85% 30%,#1e6bff 0,transparent 50%),linear-gradient(160deg,#08101f,#05070d)"],
+      ["ピンク×シアン", "radial-gradient(50% 60% at 10% 90%,#ff3ca6 0,transparent 55%),radial-gradient(50% 60% at 90% 10%,#19e6ff 0,transparent 55%),#0a0612"],
+      ["オーロラ", "linear-gradient(120deg,#0a2a43,#1b3b8a 35%,#6d2bb0 70%,#ff3ca6)"],
+      ["サンセット", "linear-gradient(180deg,#241433,#7a2b4a 55%,#ff7a18)"],
+      ["RLグラデ", "linear-gradient(135deg,#1e6bff,#0b1430 55%,#ff7a18)"],
+      ["ディープ", "radial-gradient(120% 120% at 50% 0%,#16243f,#070a12)"],
+      ["グリッド", "linear-gradient(rgba(124,160,255,.12) 1px,transparent 1px) 0 0/44px 44px,linear-gradient(90deg,rgba(124,160,255,.12) 1px,transparent 1px) 0 0/44px 44px,#0a0e18"],
+      ["ドット", "radial-gradient(rgba(124,160,255,.18) 1.5px,transparent 1.6px) 0 0/26px 26px,#0a0e18"],
+      ["ストライプ", "repeating-linear-gradient(45deg,rgba(255,255,255,.04) 0 14px,transparent 14px 28px),linear-gradient(160deg,#10141f,#0b0e16)"],
+      ["カーボン", "repeating-linear-gradient(45deg,#0d111b 0 6px,#0a0e16 6px 12px)"],
+      ["スポット", "radial-gradient(60% 50% at 50% 0%,rgba(92,255,201,.18) 0,transparent 60%),#07090f"],
+    ];
+    $("bgPresets").innerHTML = BG_PRESETS.map(([l, css], i) => `<button data-bg="${i}" style="background:${css}">${l}</button>`).join("");
+    $("bgPresets").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-bg]"); if (!b) return;
+      emitScene({ background: { type: "css", css: BG_PRESETS[+b.dataset.bg][1], image: "" } });
+    });
+
+    // 装飾（SVG画像 / 発光シェイプ）。各要素は完成ウィジェット定義。
+    const DECOS = [
+      { label: "コーナー", w: { type: "image", x: 60, y: 60, w: 220, h: 220, style: { radius: 0 }, config: { src: "/assets/deco-corner.svg", fit: "contain" } } },
+      { label: "下帯", w: { type: "image", x: 560, y: 920, w: 800, h: 120, style: { radius: 0 }, config: { src: "/assets/deco-bar.svg", fit: "fill" } } },
+      { label: "バッジ", w: { type: "image", x: 90, y: 90, w: 180, h: 200, style: { radius: 0 }, config: { src: "/assets/deco-badge.svg", fit: "contain" } } },
+      { label: "発光・青", w: { type: "shape", x: 120, y: 160, w: 560, h: 560, style: { bg: "radial-gradient(circle,rgba(30,107,255,.55),transparent 70%)", radius: 280, borderWidth: 0, blur: 30 } } },
+      { label: "発光・シアン", w: { type: "shape", x: 1240, y: 120, w: 560, h: 560, style: { bg: "radial-gradient(circle,rgba(92,255,201,.5),transparent 70%)", radius: 280, borderWidth: 0, blur: 30 } } },
+      { label: "発光・ピンク", w: { type: "shape", x: 680, y: 480, w: 620, h: 620, style: { bg: "radial-gradient(circle,rgba(255,60,166,.5),transparent 70%)", radius: 310, borderWidth: 0, blur: 34 } } },
+      { label: "ネオン線", w: { type: "shape", x: 660, y: 540, w: 600, h: 6, style: { bg: "linear-gradient(90deg,#1e6bff,#ff7a18)", radius: 3, borderWidth: 0, glow: true, borderColor: "#1e6bff" } } },
+      { label: "サイド帯", w: { type: "shape", x: 0, y: 0, w: 520, h: 1080, style: { bg: "linear-gradient(180deg,rgba(13,18,32,.92),rgba(8,10,18,.92))", radius: 0, borderWidth: 0 } } },
+    ];
 
     $("tpl").innerHTML = TPLS.map(([k, l, i]) => `<button class="ghost sm" data-tpl="${k}">${ico(i)}${l}</button>`).join("");
     $("tpl").addEventListener("click", (e) => { const b = e.target.closest("[data-tpl]"); if (b) socket.emit("scene:newFromTemplate", b.dataset.tpl); });
@@ -429,11 +475,11 @@
       `<button data-pal="${k}" style="display:flex;align-items:center;gap:6px;justify-content:center"><span style="width:12px;height:12px;border-radius:3px;background:${c}"></span>${l}</button>`).join("");
     $("palettes").addEventListener("click", (e) => { const b = e.target.closest("[data-pal]"); if (b) socket.emit("scene:applyPalette", b.dataset.pal); });
 
-    $("decos").innerHTML = DECOS.map(([src, l]) => `<button data-deco="${src}">${l}</button>`).join("");
+    $("decos").innerHTML = DECOS.map((d, i) => `<button data-deco="${i}">${d.label}</button>`).join("");
     $("decos").addEventListener("click", (e) => {
       const b = e.target.closest("[data-deco]"); if (!b) return;
-      const d = DECOS.find((x) => x[0] === b.dataset.deco);
-      socket.emit("widget:upsert", { sceneId: activeId, widget: { type: "image", x: 60, y: 60, w: d[2], h: d[3], style: { radius: 0 }, config: { src: d[0], fit: "contain" } } });
+      const w = JSON.parse(JSON.stringify(DECOS[+b.dataset.deco].w));
+      socket.emit("widget:upsert", { sceneId: activeId, widget: w });
     });
 
     $("upBtn").onclick = () => pickAndUpload((url) =>
