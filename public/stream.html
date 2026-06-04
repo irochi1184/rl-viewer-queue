@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>配信画面</title>
+  <style>
+    /* OBSブラウザソース(1920x1080)用。ゲーム枠は透明にしてゲーム映像を透かす。 */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: transparent; overflow: hidden;
+      font-family: "Inter", "Segoe UI", "Hiragino Kaku Gothic ProN", "Hiragino Sans", "Noto Sans JP", sans-serif;
+      color: #fff; -webkit-font-smoothing: antialiased; }
+
+    #stage { position: absolute; left: 50%; top: 50%; width: 1920px; height: 1080px;
+      transform: translate(-50%, -50%); transform-origin: center center; }
+
+    #bg { position: absolute; inset: 0; z-index: 0; }
+    #widgets { position: absolute; inset: 0; z-index: 1; }
+
+    .widget { position: absolute; overflow: hidden; }
+
+    /* ゲーム枠／カメラ枠：内側は透明、枠線のみ */
+    .w-frame { background: transparent; border-style: solid; }
+    .w-frame .frame-label { position: absolute; left: 0; top: -2px; transform: translateY(-100%);
+      font-size: 14px; font-weight: 800; letter-spacing: .08em; opacity: .9; padding: 2px 8px;
+      background: rgba(0,0,0,.5); border-radius: 6px; }
+
+    /* テキスト */
+    .w-text { display: flex; align-items: center; }
+    .w-text .txt { width: 100%; line-height: 1.2; white-space: pre-wrap; word-break: break-word; }
+
+    /* 統計 */
+    .w-stats { display: flex; gap: 10px; }
+    .stat { flex: 1; display: flex; flex-direction: column; justify-content: center;
+      padding: 10px 14px; border: 1px solid rgba(255,255,255,.1); }
+    .stat .label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; opacity: .55; font-weight: 700; }
+    .stat .value { font-size: 30px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
+
+    /* パネル共通 */
+    .panel { border-radius: inherit; overflow: hidden; margin-bottom: 8px; border: 1px solid rgba(255,255,255,.08); }
+    .panel-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.07); }
+    .panel-head .mark { width: 4px; height: 14px; border-radius: 2px; flex: none; }
+    .panel-head .title { font-weight: 800; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
+    .panel-head .cap { margin-left: auto; font-size: 12px; font-weight: 700; opacity: .7; font-variant-numeric: tabular-nums; }
+    .plist { list-style: none; padding: 6px; }
+    .pitem { display: flex; align-items: center; gap: 9px; padding: 5px 8px; margin: 3px 0;
+      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.05); border-radius: 8px; min-height: 34px; }
+    .pitem.empty { border-style: dashed; opacity: .4; }
+    .pitem .num { width: 18px; text-align: center; font-size: 12px; font-weight: 800; opacity: .4; }
+    .pitem .avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.12);
+      display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex: none; }
+    .pitem .nm { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .no-avatars .avatar { display: none; }
+    .no-numbers .num { display: none; }
+
+    /* コメント */
+    .cmt-list { list-style: none; padding: 6px; height: 100%; overflow: hidden; }
+    .crow { display: flex; align-items: flex-start; gap: 8px; padding: 5px 8px; margin: 3px 0;
+      background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.05); border-radius: 8px; animation: slideIn .28s ease; }
+    .crow .cname { font-size: calc(var(--cf) * .72); font-weight: 800; opacity: .75; display: block; }
+    .crow .ctext { font-size: var(--cf); font-weight: 600; word-break: break-word; line-height: 1.35; }
+    .crow.owner .cname { color: #ffd24a; }
+    .cmt-ticker { position: relative; width: 100%; height: 100%; overflow: hidden; pointer-events: none; }
+    .dm { position: absolute; left: 0; white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;
+      padding: 5px 14px; border-radius: 999px; background: rgba(10,12,20,.66); border: 1px solid rgba(255,255,255,.1);
+      box-shadow: 0 3px 12px rgba(0,0,0,.4); will-change: transform; font-weight: 700; font-size: var(--cf); }
+    .dm .cname { font-size: calc(var(--cf) * .75); opacity: .75; font-weight: 800; }
+    .dm.owner { border-color: rgba(255,210,74,.5); }
+    .dm.owner .cname { color: #ffd24a; }
+
+    .empty-note { padding: 12px; text-align: center; opacity: .4; font-size: 12px; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: translateX(0); } }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="bg"></div>
+    <svg id="maskSvg" width="0" height="0" aria-hidden="true">
+      <defs><mask id="holeMask" maskUnits="userSpaceOnUse" x="0" y="0" width="1920" height="1080"></mask></defs>
+    </svg>
+    <div id="widgets"></div>
+  </div>
+
+  <script src="/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const $ = (id) => document.getElementById(id);
+    const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("ja-JP"));
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    // 縮小表示（ウィンドウに合わせる。OBSの1920x1080では等倍）。
+    function fit() {
+      const s = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+      $("stage").style.transform = `translate(-50%, -50%) scale(${s})`;
+    }
+    window.addEventListener("resize", fit);
+    fit();
+
+    // データキャッシュ
+    let DATA = { subscriberCount: null, concurrentViewers: null, teamSize: 3, queue: [], blue: [], orange: [] };
+    let comments = [];
+    let scenesData = null;
+    let currentSceneJSON = "";
+    const commentBoxes = []; // CommentBox インスタンス
+
+    function pickActive(d) {
+      if (!d || !Array.isArray(d.scenes)) return null;
+      return d.scenes.find((s) => s.id === d.activeId) || d.scenes[0] || null;
+    }
+
+    // ---- 描画 ----
+    function buildScene(scene) {
+      commentBoxes.length = 0;
+      const wrap = $("widgets");
+      wrap.innerHTML = "";
+
+      // 背景
+      const bg = $("bg");
+      const b = scene.background || {};
+      if (b.type === "image" && b.image) {
+        bg.style.background = `#000 url("${b.image}") center/${b.fit || "cover"} no-repeat`;
+      } else if (b.type === "gradient") {
+        bg.style.background = b.gradient || "linear-gradient(135deg,#10141f,#0b0e16)";
+      } else if (b.type === "color") {
+        bg.style.background = b.color || "#0b0e16";
+      } else {
+        bg.style.background = "transparent";
+      }
+
+      // ゲーム枠／カメラ枠の位置に背景の穴をあける（SVGマスク）
+      const frames = (scene.widgets || []).filter((w) => w.type === "gameFrame" || w.type === "cameraFrame");
+      const mask = $("holeMask");
+      let mhtml = '<rect x="0" y="0" width="1920" height="1080" fill="#fff"/>';
+      for (const f of frames) {
+        const r = (f.style && f.style.radius) || 0;
+        mhtml += `<rect x="${f.x}" y="${f.y}" width="${f.w}" height="${f.h}" rx="${r}" ry="${r}" fill="#000"/>`;
+      }
+      mask.innerHTML = mhtml;
+      bg.style.webkitMask = "url(#holeMask)";
+      bg.style.mask = "url(#holeMask)";
+
+      // ウィジェット（z昇順）
+      const widgets = (scene.widgets || []).slice().sort((a, b) => (a.z || 0) - (b.z || 0));
+      for (const w of widgets) {
+        const el = document.createElement("div");
+        el.className = "widget";
+        el.style.left = w.x + "px";
+        el.style.top = w.y + "px";
+        el.style.width = w.w + "px";
+        el.style.height = w.h + "px";
+        el.style.zIndex = w.z || 0;
+        renderWidget(el, w);
+        wrap.appendChild(el);
+      }
+      refreshData();
+    }
+
+    function renderWidget(el, w) {
+      const st = w.style || {};
+      const cf = w.config || {};
+      switch (w.type) {
+        case "gameFrame":
+        case "cameraFrame": {
+          el.classList.add("w-frame");
+          el.style.borderWidth = (st.borderWidth ?? 3) + "px";
+          el.style.borderColor = st.borderColor || "#1e6bff";
+          el.style.borderRadius = (st.radius || 0) + "px";
+          if (st.shadow) el.style.boxShadow = "0 0 0 1px rgba(0,0,0,.4), 0 14px 40px rgba(0,0,0,.5)";
+          if (cf.showLabel && cf.label) {
+            const lab = document.createElement("div");
+            lab.className = "frame-label";
+            lab.textContent = cf.label;
+            el.appendChild(lab);
+          }
+          break;
+        }
+        case "text": {
+          el.classList.add("w-text");
+          el.style.justifyContent = st.align === "center" ? "center" : st.align === "right" ? "flex-end" : "flex-start";
+          if (st.bg && st.bg !== "transparent") { el.style.background = st.bg; el.style.borderRadius = (st.radius || 0) + "px"; el.style.padding = "8px 14px"; }
+          const t = document.createElement("div");
+          t.className = "txt";
+          t.style.color = st.color || "#fff";
+          t.style.fontSize = (st.fontSize || 28) + "px";
+          t.style.fontWeight = st.fontWeight || 700;
+          t.style.textAlign = st.align || "left";
+          t.textContent = cf.text || "";
+          el.appendChild(t);
+          break;
+        }
+        case "shape": {
+          el.style.background = st.bg || "rgba(17,20,33,.85)";
+          el.style.borderRadius = (st.radius || 12) + "px";
+          if (st.borderWidth) { el.style.border = `${st.borderWidth}px solid ${st.borderColor || "rgba(255,255,255,.15)"}`; }
+          if (st.shadow) el.style.boxShadow = "0 14px 40px rgba(0,0,0,.45)";
+          break;
+        }
+        case "image": {
+          if (cf.src) {
+            const img = document.createElement("img");
+            img.src = cf.src;
+            img.style.width = "100%"; img.style.height = "100%";
+            img.style.objectFit = cf.fit || "contain";
+            img.style.borderRadius = (st.radius || 0) + "px";
+            el.appendChild(img);
+          }
+          break;
+        }
+        case "stats": {
+          el.classList.add("w-stats");
+          el.dataset.kind = "stats";
+          el.style.setProperty("--accent", st.accent || "#5cffc9");
+          panelBg(el, st);
+          el.innerHTML =
+            (cf.showSubs !== false ? statCard("Subscribers", "subs") : "") +
+            (cf.showViewers !== false ? statCard("Live Viewers", "viewers") : "");
+          break;
+        }
+        case "participants": {
+          el.dataset.kind = "participants";
+          el.dataset.show = cf.show || "teams";
+          if (!cf.showAvatars) el.classList.add("no-avatars");
+          if (!cf.showNumbers) el.classList.add("no-numbers");
+          el.style.setProperty("--blue", st.blue || "#1e6bff");
+          el.style.setProperty("--orange", st.orange || "#ff7a18");
+          el.style.setProperty("--accent", st.accent || "#5cffc9");
+          el.style.color = st.color || "#fff";
+          el.style.borderRadius = (st.radius || 12) + "px";
+          el.style.overflowY = "hidden";
+          // 中身は refreshData で更新
+          break;
+        }
+        case "comments": {
+          el.dataset.kind = "comments";
+          el.style.setProperty("--cf", (st.fontSize || 18) + "px");
+          el.style.color = st.color || "#fff";
+          panelBg(el, st);
+          const box = new CommentBox(el, cf, st);
+          box.seed(comments);
+          commentBoxes.push(box);
+          break;
+        }
+        default:
+          el.style.outline = "1px dashed rgba(255,255,255,.2)";
+          el.textContent = "(" + w.type + ")";
+      }
+    }
+
+    function panelBg(el, st) {
+      const a = (st.bgOpacity == null ? 90 : st.bgOpacity) / 100;
+      el.style.background = `linear-gradient(180deg, rgba(17,20,33,${a}), rgba(11,13,22,${a}))`;
+      el.style.borderRadius = (st.radius || 12) + "px";
+      el.style.border = "1px solid rgba(255,255,255,.08)";
+    }
+    function statCard(label, key) {
+      return `<div class="stat"><div class="label">${label}</div><div class="value" data-stat="${key}">—</div></div>`;
+    }
+
+    // 動的データの反映（再構築せず中身だけ更新）
+    function refreshData() {
+      document.querySelectorAll('[data-stat="subs"]').forEach((e) => (e.textContent = fmt(DATA.subscriberCount)));
+      document.querySelectorAll('[data-stat="viewers"]').forEach((e) => (e.textContent = fmt(DATA.concurrentViewers)));
+      document.querySelectorAll('[data-kind="participants"]').forEach((el) => renderParticipants(el));
+    }
+
+    function teamPanel(title, cls, members, size, color, showEmpty) {
+      let items = members.map((e, i) => pitem(e, i)).join("");
+      if (showEmpty) for (let k = members.length; k < size; k++) items += `<li class="pitem empty"><div class="avatar"></div><span class="nm">空き</span></li>`;
+      return `<div class="panel"><div class="panel-head"><span class="mark" style="background:${color}"></span>
+        <span class="title" style="color:${color}">${esc(title)}</span><span class="cap">${members.length}/${size}</span></div>
+        <ul class="plist">${items}</ul></div>`;
+    }
+    function pitem(e, i) {
+      const ch = (e.name || "?").trim().charAt(0).toUpperCase() || "?";
+      const av = e.photo ? `<img class="avatar" src="${e.photo}"/>` : `<div class="avatar">${esc(ch)}</div>`;
+      const num = i != null ? `<span class="num">${i + 1}</span>` : "";
+      return `<li class="pitem">${num}${av}<span class="nm">${esc(e.name)}</span></li>`;
+    }
+    function renderParticipants(el) {
+      const show = el.dataset.show || "teams";
+      const size = DATA.teamSize || 3;
+      let html = "";
+      const blue = `var(--blue)`, orange = `var(--orange)`, accent = `var(--accent)`;
+      if (show === "teams" || show === "all" || show === "blue")
+        html += teamPanel("青チーム", "blue", DATA.blue || [], size, "#1e6bff", true);
+      if (show === "teams" || show === "all" || show === "orange")
+        html += teamPanel("オレンジ", "orange", DATA.orange || [], size, "#ff7a18", true);
+      if (show === "all" || show === "queue") {
+        const q = DATA.queue || [];
+        const items = q.length ? q.map((e, i) => pitem(e, i)).join("") : `<li class="empty-note">参加希望を待機中…</li>`;
+        html += `<div class="panel"><div class="panel-head"><span class="mark" style="background:#5cffc9"></span>
+          <span class="title" style="color:#5cffc9">待機列</span><span class="cap">${q.length}</span></div>
+          <ul class="plist">${items}</ul></div>`;
+      }
+      el.innerHTML = html;
+    }
+
+    // ---- コメント描画（縦一覧／横流れ） ----
+    class CommentBox {
+      constructor(boxEl, cfg, st) {
+        this.box = boxEl;
+        this.cfg = cfg || {};
+        this.st = st || {};
+        this.history = [];
+        this.lane = [];
+        this.raf = null;
+        this.lastTs = 0;
+        this.GAP = 24;
+        this.inner = document.createElement("div");
+        if (this.cfg.mode === "ticker") {
+          this.inner.className = "cmt-ticker";
+        } else {
+          this.inner.className = "cmt-list";
+        }
+        this.box.appendChild(this.inner);
+      }
+      seed(arr) {
+        if (this.cfg.mode === "ticker") return; // 横流れは過去分を一気に流さない
+        this.history = (arr || []).slice();
+        this._renderList();
+      }
+      push(c) {
+        if (this.cfg.mode === "ticker") this._enqueue(c);
+        else { this.history.push(c); this._renderList(); }
+      }
+      _renderList() {
+        const max = this.cfg.max || 8;
+        const items = this.history.slice(-max);
+        this.inner.innerHTML = items.map((c) => {
+          const cls = c.isOwner ? " owner" : "";
+          const ch = (c.name || "?").trim().charAt(0).toUpperCase() || "?";
+          const photo = this.cfg.showPhoto
+            ? (c.photo ? `<img class="avatar" src="${c.photo}"/>` : `<div class="avatar">${esc(ch)}</div>`) : "";
+          return `<li class="crow${cls}">${photo}<div><span class="cname">${esc(c.name)}</span><span class="ctext">${esc(c.text)}</span></div></li>`;
+        }).join("");
+        this.inner.scrollTop = this.inner.scrollHeight;
+      }
+      _enqueue(c) {
+        const el = document.createElement("div");
+        el.className = "dm" + (c.isOwner ? " owner" : "");
+        const photo = this.cfg.showPhoto && c.photo ? `<img class="avatar" style="width:1.4em;height:1.4em;border-radius:50%" src="${c.photo}"/>` : "";
+        el.innerHTML = `${photo}<span class="cname">${esc(c.name)}</span><span class="ctext">${esc(c.text)}</span>`;
+        this.inner.appendChild(el);
+        const w = el.offsetWidth;
+        const W = this.inner.clientWidth || 400;
+        const prev = this.lane[this.lane.length - 1];
+        const startX = prev ? Math.max(W, prev.x + prev.w + this.GAP) : W;
+        el.style.top = Math.max(0, (this.inner.clientHeight - el.offsetHeight) / 2) + "px";
+        el.style.transform = `translateX(${startX}px)`;
+        this.lane.push({ el, x: startX, w });
+        if (this.raf == null) { this.lastTs = performance.now(); this.raf = requestAnimationFrame((t) => this._step(t)); }
+      }
+      _step(now) {
+        const W = this.inner.clientWidth || 400;
+        const dt = Math.min(50, now - this.lastTs); this.lastTs = now;
+        const sec = this.cfg.speed || 12;
+        const v = W / (sec * 1000);
+        const rest = 8;
+        let moved = false;
+        for (let i = 0; i < this.lane.length; i++) {
+          const c = this.lane[i];
+          const before = c.x;
+          let nx = c.x - v * dt;
+          if (i > 0) { const a = this.lane[i - 1]; const min = a.x + a.w + this.GAP; if (nx < min) nx = min; }
+          if (i === this.lane.length - 1 && nx < rest) nx = rest;
+          c.x = nx;
+          c.el.style.transform = `translateX(${nx}px)`;
+          if (Math.abs(nx - before) > 0.05) moved = true;
+        }
+        while (this.lane.length && this.lane[0].x + this.lane[0].w < -4) { this.lane[0].el.remove(); this.lane.shift(); }
+        this.raf = this.lane.length && moved ? requestAnimationFrame((t) => this._step(t)) : null;
+      }
+    }
+
+    // ---- socket ----
+    function applyState(s) {
+      DATA.subscriberCount = s.subscriberCount;
+      DATA.concurrentViewers = s.concurrentViewers;
+      DATA.teamSize = s.teamSize || 3;
+      DATA.queue = s.queue || [];
+      DATA.blue = s.blue || [];
+      DATA.orange = s.orange || [];
+      if (Array.isArray(s.comments)) comments = s.comments.slice();
+      if (s.scenes) applyScenes(s.scenes);
+      else refreshData();
+    }
+    function applyScenes(d) {
+      scenesData = d;
+      const active = pickActive(d);
+      if (!active) return;
+      const j = JSON.stringify(active);
+      if (j !== currentSceneJSON) { currentSceneJSON = j; buildScene(active); }
+      else refreshData();
+    }
+
+    socket.on("state", applyState);
+    socket.on("scenes", applyScenes);
+    socket.on("comment", (c) => {
+      comments.push(c);
+      if (comments.length > 80) comments.shift();
+      commentBoxes.forEach((b) => b.push(c));
+    });
+  </script>
+</body>
+</html>

@@ -10,6 +10,7 @@ import { getAuthorizedClient } from "./auth.js";
 import { YouTubeMonitor } from "./youtube.js";
 import { ParticipantQueue } from "./queue.js";
 import { OverlaySettings } from "./settings.js";
+import { SceneStore } from "./scenes.js";
 
 const PORT = Number(process.env.PORT || 3000);
 const JOIN_KEYWORDS = (process.env.JOIN_KEYWORDS || "参加希望")
@@ -32,6 +33,7 @@ const state = {
 
 const queue = new ParticipantQueue({ teamSize: DEFAULT_TEAM_SIZE });
 const settings = new OverlaySettings();
+const scenes = new SceneStore();
 
 const app = express();
 app.use(express.json());
@@ -90,6 +92,7 @@ function snapshot() {
     keywords: JOIN_KEYWORDS,
     ...queue.snapshot(),
     settings: settings.get(),
+    scenes: scenes.get(),
     comments: recentComments,
   };
 }
@@ -114,16 +117,31 @@ io.on("connection", (socket) => {
   // オーバーレイ設定の更新・リセット。
   socket.on("settings:update", (patch) => settings.update(patch));
   socket.on("settings:reset", () => settings.reset());
+
+  // シーン（配信画面レイアウト）の操作。
+  socket.on("scene:activate", (id) => scenes.activate(id));
+  socket.on("scene:update", ({ id, patch } = {}) => scenes.updateScene(id || scenes.get().activeId, patch));
+  socket.on("scene:create", (name) => scenes.createScene(name));
+  socket.on("scene:duplicate", (id) => scenes.duplicateScene(id || scenes.get().activeId));
+  socket.on("scene:rename", ({ id, name } = {}) => scenes.renameScene(id, name));
+  socket.on("scene:delete", (id) => scenes.deleteScene(id));
+  socket.on("scene:reset", () => scenes.reset());
+  socket.on("widget:upsert", ({ sceneId, widget } = {}) => scenes.upsertWidget(sceneId, widget));
+  socket.on("widget:remove", ({ sceneId, widgetId } = {}) => scenes.removeWidget(sceneId, widgetId));
+  socket.on("widget:reorder", ({ sceneId, ids } = {}) => scenes.reorderWidgets(sceneId, ids));
 });
 
 queue.on("change", () => broadcast());
 // 設定変更は専用イベントでも通知（オーバーレイ/設定画面が軽量に反映できる）。
 settings.on("change", (s) => io.emit("settings", s));
+// シーン変更も専用イベントで通知（配信画面/エディタが反映）。
+scenes.on("change", (d) => io.emit("scenes", d));
 
 function printEndpoints() {
   console.log("\n----------------------------------------------");
-  console.log(`管理画面 : http://localhost:${PORT}/admin.html`);
-  console.log(`OBS用URL : http://localhost:${PORT}/overlay.html`);
+  console.log(`管理画面   : http://localhost:${PORT}/admin.html`);
+  console.log(`配信画面   : http://localhost:${PORT}/stream.html   ← OBSブラウザソース(1920x1080)`);
+  console.log(`(旧)部品別 : http://localhost:${PORT}/overlay.html`);
   console.log("  → OBSの「ブラウザソース」に上記URLを設定してください。");
   console.log("----------------------------------------------\n");
 }
