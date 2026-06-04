@@ -11,3 +11,8 @@ dist/
 build/
 # 自動生成（ビルド時にコピーされる）
 public/socket.io.min.js
+# 開発時のサーバー実行ログ
+.demo.out
+.demo.err
+.prod.out
+.prod.err

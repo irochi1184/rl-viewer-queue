@@ -422,6 +422,26 @@
         ${areaF("背景CSS（上級）", "background.css", b.css)}
         ${txtF("画像URL", "background.image", b.image)}
         <button class="ghost sm" id="upBg" style="width:100%;margin-top:6px">背景画像をアップロード</button>
+
+        <h2 style="margin-top:18px">背景カスタム作成</h2>
+        <div class="muted" style="margin-bottom:4px">色と模様を選ぶと、その場で背景が作られます。</div>
+        <label class="fld">ベース</label>
+        <select id="bbType"><option value="gradient">グラデーション</option><option value="solid">単色</option></select>
+        <div class="row2">
+          <div><label class="fld">色1</label><input type="color" id="bbC1" value="#ff9ec7"></div>
+          <div><label class="fld">色2</label><input type="color" id="bbC2" value="#d6e9ff"></div>
+        </div>
+        <label class="fld">角度: <span id="bbAngV">135</span>°</label><input type="range" id="bbAng" min="0" max="360" value="135">
+        <label class="fld">模様</label>
+        <select id="bbPat">
+          <option value="none">なし</option><option value="dots">水玉</option><option value="hearts">ハート</option>
+          <option value="stars">星</option><option value="stripes">ストライプ</option><option value="check">チェック</option><option value="grid">格子</option>
+        </select>
+        <div class="row2">
+          <div><label class="fld">模様の色</label><input type="color" id="bbPc" value="#ffffff"></div>
+          <div><label class="fld">濃さ: <span id="bbOpV">50</span></label><input type="range" id="bbOp" min="0" max="100" value="50"></div>
+        </div>
+        <label class="fld">模様サイズ: <span id="bbSzV">40</span></label><input type="range" id="bbSz" min="16" max="140" value="40">
         <div class="muted" style="margin-top:14px">部品を選ぶと、ここで色・サイズ・内容を編集できます。</div>`;
     }
     function bindSceneInspector() {
@@ -435,12 +455,49 @@
       }));
       const up = $("upBg");
       if (up) up.onclick = () => pickAndUpload((url) => emitScene({ background: { type: "image", image: url } }));
+
+      // 背景カスタムビルダー
+      if ($("bbType")) {
+        const applyBg = throttle(() => {
+          const type = $("bbType").value, c1 = $("bbC1").value, c2 = $("bbC2").value, ang = $("bbAng").value;
+          const pat = $("bbPat").value, pc = $("bbPc").value, op = +$("bbOp").value, sz = +$("bbSz").value;
+          $("bbAngV").textContent = ang; $("bbOpV").textContent = op; $("bbSzV").textContent = sz;
+          const base = type === "gradient" ? `linear-gradient(${ang}deg, ${c1}, ${c2})` : c1;
+          const p = patternLayer(pat, hexA(pc, op / 100), sz);
+          const css = p ? `${p}, ${base}` : base;
+          emitScene({ background: { type: "css", css, image: "" } });
+        }, 70);
+        ["bbType", "bbC1", "bbC2", "bbAng", "bbPat", "bbPc", "bbOp", "bbSz"].forEach((id) => $(id).addEventListener("input", applyBg));
+      }
     }
 
     // ---- テンプレート / カラー / 装飾 / アップロード ----
     const TPLS = [["match", "試合中", "gameFrame"], ["recruit", "参加募集", "megaphone"], ["starting", "開始前", "clock"]];
     const PALS = [["rl", "RL", "#5cffc9"], ["neon", "ネオン", "#19e6ff"], ["sunset", "夕焼け", "#ffb020"], ["mono", "モノ", "#c9ccd6"]];
-    // 背景プリセット（ネオン/グラデ/パターン）。クリックで現在シーンの背景CSSに適用。
+    // 背景生成ヘルパー（プリセット・カスタムビルダー共通）
+    const hexA = (hex, a) => {
+      const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+      if (!m) return hex || "#fff";
+      const n = parseInt(m[1], 16);
+      return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+    };
+    const svgUri = (svg) => `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+    const heartSvg = (c) => `<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 32 32'><path d='M16 27C16 27 4 19.5 4 11.6 4 7.4 7 5 10.3 5 12.7 5 14.8 6.4 16 8.6 17.2 6.4 19.3 5 21.7 5 25 5 28 7.4 28 11.6 28 19.5 16 27 16 27Z' fill='${c}'/></svg>`;
+    const starSvg = (c) => `<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 32 32'><path d='M16 3l3.8 8.6 9.2.8-7 6.1 2.1 9.1L16 21.9 7.9 27.6 10 18.5 3 12.4l9.2-.8z' fill='${c}'/></svg>`;
+    function patternLayer(kind, color, size) {
+      const r = Math.max(1.5, size * 0.08);
+      switch (kind) {
+        case "dots": return `radial-gradient(${color} ${r}px, transparent ${r + 1}px) 0 0 / ${size}px ${size}px`;
+        case "grid": return `linear-gradient(${color} 1px,transparent 1px) 0 0/${size}px ${size}px,linear-gradient(90deg,${color} 1px,transparent 1px) 0 0/${size}px ${size}px`;
+        case "stripes": return `repeating-linear-gradient(45deg,${color} 0 ${size / 2}px,transparent ${size / 2}px ${size}px)`;
+        case "check": return `linear-gradient(${color} 50%,transparent 50%) 0 0/${size}px ${size}px,linear-gradient(90deg,${color} 50%,transparent 50%) 0 0/${size}px ${size}px`;
+        case "hearts": return `${svgUri(heartSvg(color))} 0 0 / ${size}px ${size}px`;
+        case "stars": return `${svgUri(starSvg(color))} 0 0 / ${size}px ${size}px`;
+        default: return "";
+      }
+    }
+
+    // 背景プリセット（ネオン/グラデ/パターン/ポップ）。クリックで現在シーンの背景CSSに適用。
     const BG_PRESETS = [
       ["ネオン紫", "radial-gradient(60% 80% at 20% 10%,#3a1d6e 0,transparent 60%),radial-gradient(50% 60% at 90% 20%,#6d2bb0 0,transparent 55%),linear-gradient(160deg,#140a24,#080612)"],
       ["ネオン青", "radial-gradient(60% 80% at 15% 10%,#14346e 0,transparent 60%),radial-gradient(50% 60% at 85% 30%,#1e6bff 0,transparent 50%),linear-gradient(160deg,#08101f,#05070d)"],
@@ -454,6 +511,14 @@
       ["ストライプ", "repeating-linear-gradient(45deg,rgba(255,255,255,.04) 0 14px,transparent 14px 28px),linear-gradient(160deg,#10141f,#0b0e16)"],
       ["カーボン", "repeating-linear-gradient(45deg,#0d111b 0 6px,#0a0e16 6px 12px)"],
       ["スポット", "radial-gradient(60% 50% at 50% 0%,rgba(92,255,201,.18) 0,transparent 60%),#07090f"],
+      ["ゆめかわ", "linear-gradient(135deg,#ffd1f0,#d9e6ff 50%,#d6fff4)"],
+      ["パステル虹", "linear-gradient(120deg,#ffd1dc,#ffe9c7 30%,#d6ffd9 60%,#d1ecff)"],
+      ["ピンク水玉", `${patternLayer("dots", hexA("#ffffff", 0.55), 30)}, linear-gradient(135deg,#ff9ec7,#ff77b0)`],
+      ["ミントポップ", `${patternLayer("dots", hexA("#ffffff", 0.5), 28)}, linear-gradient(135deg,#9ff0e0,#7fd6ff)`],
+      ["ラベンダー", "linear-gradient(160deg,#e6d8ff,#c9b3ff 60%,#ffd1f0)"],
+      ["ハート", `${patternLayer("hearts", hexA("#ffffff", 0.5), 46)}, linear-gradient(135deg,#ff9ec7,#ffb3d1)`],
+      ["きらきら", `${patternLayer("stars", hexA("#ffffff", 0.65), 50)}, linear-gradient(135deg,#ffe0f0,#d9c2ff)`],
+      ["ギンガム", `${patternLayer("check", hexA("#ff77b0", 0.35), 44)}, #fff0f6`],
     ];
     $("bgPresets").innerHTML = BG_PRESETS.map(([l, css], i) => `<button data-bg="${i}" style="background:${css}">${l}</button>`).join("");
     $("bgPresets").addEventListener("click", (e) => {
