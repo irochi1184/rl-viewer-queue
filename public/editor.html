@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>配信画面エディタ</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; height: 100vh; overflow: hidden; background: #0b0e16; color: #e8ecf5;
+      font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif; display: grid;
+      grid-template-columns: 248px 1fr 300px; grid-template-rows: 100vh; }
+    a { color: #7aa0ff; }
+    .pane { overflow-y: auto; padding: 12px; }
+    .left { border-right: 1px solid #20283f; }
+    .right { border-left: 1px solid #20283f; background: #0e1320; }
+    .center { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #070910; min-width: 0; }
+
+    h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: #8ea3e0; margin: 14px 0 8px; }
+    h2:first-child { margin-top: 0; }
+    .muted { opacity: .55; font-size: 12px; }
+
+    select, input[type=text], input[type=number], textarea {
+      background: #161c30; border: 1px solid #2a3658; color: #fff; border-radius: 7px; padding: 6px 8px; font-size: 13px; width: 100%; }
+    textarea { resize: vertical; min-height: 54px; font-family: inherit; }
+    input[type=color] { width: 100%; height: 30px; padding: 0; border: 1px solid #2a3658; border-radius: 6px; background: #161c30; }
+    input[type=range] { width: 100%; }
+    input[type=checkbox] { width: 16px; height: 16px; }
+    label.fld { display: block; font-size: 12px; opacity: .8; margin: 8px 0 3px; }
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .chk { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 8px 0; }
+
+    button { background: #2b6cff; color: #fff; border: none; cursor: pointer; border-radius: 7px;
+      padding: 7px 10px; font-size: 12px; font-weight: 700; }
+    button:hover { filter: brightness(1.12); }
+    button.ghost { background: #232b45; }
+    button.danger { background: #c0394b; }
+    button.sm { padding: 4px 7px; font-size: 11px; }
+    .btnrow { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .palette button { background: #1a2138; border: 1px solid #2a3658; padding: 9px 6px; font-size: 12px; }
+
+    .layers { list-style: none; padding: 0; margin: 0; }
+    .layer { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 3px 0; border-radius: 7px;
+      background: #141a2c; border: 1px solid #232b45; cursor: pointer; font-size: 12px; }
+    .layer.sel { border-color: #2b6cff; background: #18213d; }
+    .layer .lt { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .layer .lx { background: transparent; color: #f88; padding: 2px 5px; }
+    .layer .lm { background: #232b45; padding: 2px 6px; }
+
+    /* キャンバス */
+    .stagewrap { position: relative; box-shadow: 0 20px 60px rgba(0,0,0,.6);
+      background-color: #11161f;
+      background-image:
+        linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.05) 75%),
+        linear-gradient(45deg, rgba(255,255,255,.05) 25%, transparent 25%, transparent 75%, rgba(255,255,255,.05) 75%);
+      background-size: 26px 26px; background-position: 0 0, 13px 13px; }
+    .stagewrap iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; pointer-events: none; }
+    #overlay { position: absolute; inset: 0; }
+    .box { position: absolute; border: 1px solid transparent; cursor: move; }
+    .box:hover { border-color: rgba(122,160,255,.6); }
+    .box.sel { border: 1.5px solid #2b6cff; box-shadow: 0 0 0 1px rgba(43,108,255,.3); }
+    .box .tag { position: absolute; top: -18px; left: 0; font-size: 10px; background: #2b6cff; color: #fff;
+      padding: 1px 5px; border-radius: 4px 4px 0 0; white-space: nowrap; opacity: 0; }
+    .box.sel .tag, .box:hover .tag { opacity: 1; }
+    .h { position: absolute; width: 10px; height: 10px; background: #fff; border: 1.5px solid #2b6cff; border-radius: 2px; }
+    .h.nw { left: -5px; top: -5px; cursor: nwse-resize; }
+    .h.ne { right: -5px; top: -5px; cursor: nesw-resize; }
+    .h.sw { left: -5px; bottom: -5px; cursor: nesw-resize; }
+    .h.se { right: -5px; bottom: -5px; cursor: nwse-resize; }
+    .topbar { width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #0e1320; border-bottom: 1px solid #20283f; }
+    .topbar .grow { flex: 1; }
+    .pos { font-size: 11px; opacity: .6; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <!-- 左：シーン管理・部品・レイヤー -->
+  <div class="pane left">
+    <h2>シーン</h2>
+    <select id="sceneSel"></select>
+    <div class="btnrow" style="margin-top:8px">
+      <button class="ghost sm" id="newScene">新規</button>
+      <button class="ghost sm" id="dupScene">複製</button>
+      <button class="ghost sm" id="renScene">名前変更</button>
+      <button class="danger sm" id="delScene">削除</button>
+    </div>
+
+    <h2>部品を追加</h2>
+    <div class="palette" id="palette">
+      <button data-add="gameFrame">🎮 ゲーム枠</button>
+      <button data-add="cameraFrame">📷 カメラ枠</button>
+      <button data-add="text">🆎 テキスト</button>
+      <button data-add="shape">▭ 図形パネル</button>
+      <button data-add="image">🖼 画像</button>
+      <button data-add="stats">📊 統計</button>
+      <button data-add="participants">👥 参加者</button>
+      <button data-add="comments">💬 コメント</button>
+    </div>
+
+    <h2>レイヤー（上=手前）</h2>
+    <ul class="layers" id="layers"></ul>
+
+    <h2>その他</h2>
+    <div class="btnrow">
+      <a href="/admin.html" style="text-decoration:none"><button class="ghost sm">管理画面</button></a>
+      <button class="ghost sm" id="resetScenes">初期化</button>
+    </div>
+    <div class="muted" style="margin-top:10px">OBS: <code>/stream.html</code> をブラウザソース(1920×1080)に。</div>
+  </div>
+
+  <!-- 中央：キャンバス -->
+  <div class="center">
+    <div class="topbar">
+      <strong style="font-size:13px">配信画面エディタ</strong>
+      <span class="muted">ドラッグで移動・四隅で拡縮（Alt押しでスナップ解除）</span>
+      <span class="grow"></span>
+      <span class="pos" id="posInfo"></span>
+    </div>
+    <div style="flex:1; display:flex; align-items:center; justify-content:center; width:100%; min-height:0; padding:14px;">
+      <div class="stagewrap" id="stagewrap">
+        <iframe id="preview" src="/stream.html"></iframe>
+        <div id="overlay"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右：プロパティ -->
+  <div class="pane right">
+    <div id="inspector"></div>
+  </div>
+
+  <script src="/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const $ = (id) => document.getElementById(id);
+    const SNAP = 10;
+
+    let scenesData = null, activeId = null, scene = null, selectedId = null;
+    let scale = 1; // 表示px / 1920
+
+    function active() { return scene; }
+    function widget(id) { return scene ? scene.widgets.find((w) => w.id === id) : null; }
+
+    socket.on("state", (s) => { if (s.scenes) onScenes(s.scenes); });
+    socket.on("scenes", onScenes);
+
+    function onScenes(d) {
+      scenesData = d; activeId = d.activeId;
+      scene = d.scenes.find((s) => s.id === activeId) || d.scenes[0];
+      if (selectedId && !widget(selectedId)) selectedId = null;
+      renderSceneSelect();
+      renderLayers();
+      renderOverlay();
+      renderInspector();
+    }
+
+    // ---- キャンバス寸法 ----
+    function layout() {
+      const wrap = $("stagewrap");
+      const host = wrap.parentElement;
+      const availW = host.clientWidth - 28, availH = host.clientHeight - 28;
+      const s = Math.min(availW / 1920, availH / 1080);
+      wrap.style.width = Math.round(1920 * s) + "px";
+      wrap.style.height = Math.round(1080 * s) + "px";
+      scale = s;
+      renderOverlay();
+    }
+    window.addEventListener("resize", layout);
+
+    // ---- 操作オーバーレイ（選択枠） ----
+    function renderOverlay() {
+      const ov = $("overlay");
+      ov.innerHTML = "";
+      if (!scene) return;
+      for (const w of scene.widgets.slice().sort((a, b) => (a.z || 0) - (b.z || 0))) {
+        const box = document.createElement("div");
+        box.className = "box" + (w.id === selectedId ? " sel" : "");
+        box.style.left = w.x * scale + "px";
+        box.style.top = w.y * scale + "px";
+        box.style.width = w.w * scale + "px";
+        box.style.height = w.h * scale + "px";
+        box.dataset.id = w.id;
+        box.innerHTML = `<span class="tag">${typeLabel(w.type)}</span>` +
+          (w.id === selectedId ? `<div class="h nw"></div><div class="h ne"></div><div class="h sw"></div><div class="h se"></div>` : "");
+        ov.appendChild(box);
+      }
+    }
+
+    // ---- ドラッグ移動 / リサイズ ----
+    let drag = null;
+    $("overlay").addEventListener("pointerdown", (e) => {
+      const handle = e.target.closest(".h");
+      const box = e.target.closest(".box");
+      if (!box) return;
+      const id = box.dataset.id;
+      selectedId = id;
+      const w = widget(id);
+      renderOverlay(); renderLayers(); renderInspector();
+      e.preventDefault();
+      const startX = e.clientX, startY = e.clientY;
+      const o = { x: w.x, y: w.y, w: w.w, h: w.h };
+      const mode = handle ? [...handle.classList].find((c) => ["nw", "ne", "sw", "se"].includes(c)) : "move";
+      drag = { id, startX, startY, o, mode, cur: { ...o } };
+      $("overlay").setPointerCapture(e.pointerId);
+    });
+    $("overlay").addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      const dx = (e.clientX - drag.startX) / scale, dy = (e.clientY - drag.startY) / scale;
+      const o = drag.o; let n = { ...o };
+      const snap = (v) => (e.altKey ? Math.round(v) : Math.round(v / SNAP) * SNAP);
+      if (drag.mode === "move") { n.x = snap(o.x + dx); n.y = snap(o.y + dy); }
+      else {
+        if (drag.mode.includes("e")) n.w = snap(o.w + dx);
+        if (drag.mode.includes("s")) n.h = snap(o.h + dy);
+        if (drag.mode.includes("w")) { n.x = snap(o.x + dx); n.w = snap(o.w - dx); }
+        if (drag.mode.includes("n")) { n.y = snap(o.y + dy); n.h = snap(o.h - dy); }
+        n.w = Math.max(40, n.w); n.h = Math.max(30, n.h);
+      }
+      n.x = Math.max(0, n.x); n.y = Math.max(0, n.y);
+      drag.cur = n;
+      // ローカルでボックスだけ即時移動（iframeはドロップ時に反映）
+      const box = $("overlay").querySelector(`.box[data-id="${drag.id}"]`);
+      if (box) { box.style.left = n.x * scale + "px"; box.style.top = n.y * scale + "px"; box.style.width = n.w * scale + "px"; box.style.height = n.h * scale + "px"; }
+      $("posInfo").textContent = `x:${n.x} y:${n.y}  w:${n.w} h:${n.h}`;
+    });
+    $("overlay").addEventListener("pointerup", (e) => {
+      if (!drag) return;
+      const n = drag.cur;
+      emitWidget({ id: drag.id, x: n.x, y: n.y, w: n.w, h: n.h });
+      drag = null;
+    });
+
+    // ---- 送信 ----
+    function emitWidget(patch) { socket.emit("widget:upsert", { sceneId: activeId, widget: patch }); }
+    function emitScene(patch) { socket.emit("scene:update", { id: activeId, patch }); }
+
+    // ---- シーン管理 ----
+    function renderSceneSelect() {
+      const sel = $("sceneSel");
+      sel.innerHTML = scenesData.scenes.map((s) => `<option value="${s.id}" ${s.id === activeId ? "selected" : ""}>${escapeHtml(s.name)}</option>`).join("");
+    }
+    $("sceneSel").onchange = (e) => socket.emit("scene:activate", e.target.value);
+    $("newScene").onclick = () => { const n = prompt("新しいシーン名", "新しいシーン"); if (n) socket.emit("scene:create", n); };
+    $("dupScene").onclick = () => socket.emit("scene:duplicate", activeId);
+    $("renScene").onclick = () => { const n = prompt("シーン名", scene.name); if (n) socket.emit("scene:rename", { id: activeId, name: n }); };
+    $("delScene").onclick = () => { if (scenesData.scenes.length <= 1) return alert("最後の1シーンは削除できません"); if (confirm("このシーンを削除しますか？")) socket.emit("scene:delete", activeId); };
+    $("resetScenes").onclick = () => { if (confirm("全シーンを初期状態に戻しますか？")) socket.emit("scene:reset"); };
+
+    // ---- 部品追加 ----
+    const ADD_DEFAULTS = {
+      gameFrame: { w: 1280, h: 720, style: { borderWidth: 3, borderColor: "#1e6bff", radius: 12, shadow: true }, config: { showLabel: false, label: "GAME" } },
+      cameraFrame: { w: 480, h: 270, style: { borderWidth: 3, borderColor: "#5cffc9", radius: 12, shadow: true }, config: { showLabel: true, label: "CAM" } },
+      text: { w: 480, h: 70, style: { color: "#ffffff", fontSize: 36, fontWeight: 800, align: "left", bg: "transparent" }, config: { text: "テキスト" } },
+      shape: { w: 480, h: 240, style: { bg: "rgba(17,20,33,0.85)", radius: 12, borderWidth: 0, borderColor: "rgba(255,255,255,0.15)", shadow: true }, config: {} },
+      image: { w: 320, h: 200, style: { radius: 0 }, config: { src: "", fit: "contain" } },
+      stats: { w: 480, h: 96, style: { accent: "#5cffc9", bgOpacity: 90, radius: 12 }, config: { showSubs: true, showViewers: true } },
+      participants: { w: 480, h: 520, style: { blue: "#1e6bff", orange: "#ff7a18", accent: "#5cffc9", bgOpacity: 90, radius: 12 }, config: { show: "teams", showAvatars: true, showNumbers: true, showEmpty: false } },
+      comments: { w: 480, h: 240, style: { accent: "#5cffc9", bgOpacity: 85, radius: 12, fontSize: 18 }, config: { mode: "list", max: 8, speed: 12, showPhoto: true } },
+    };
+    $("palette").addEventListener("click", (e) => {
+      const t = e.target.dataset.add; if (!t) return;
+      const d = ADD_DEFAULTS[t];
+      const w = { type: t, x: Math.round((1920 - d.w) / 2), y: Math.round((1080 - d.h) / 2), w: d.w, h: d.h, style: { ...d.style }, config: { ...d.config } };
+      socket.emit("widget:upsert", { sceneId: activeId, widget: w });
+    });
+
+    // ---- レイヤー ----
+    function renderLayers() {
+      const ul = $("layers");
+      if (!scene) return (ul.innerHTML = "");
+      const ws = scene.widgets.slice().sort((a, b) => (b.z || 0) - (a.z || 0)); // 手前が上
+      ul.innerHTML = ws.map((w) =>
+        `<li class="layer ${w.id === selectedId ? "sel" : ""}" data-id="${w.id}">
+          <span class="lt">${typeLabel(w.type)}${labelHint(w)}</span>
+          <button class="lm sm" data-up="${w.id}">▲</button>
+          <button class="lm sm" data-down="${w.id}">▼</button>
+          <button class="lx sm" data-del="${w.id}">✕</button>
+        </li>`).join("");
+    }
+    $("layers").addEventListener("click", (e) => {
+      const up = e.target.dataset.up, down = e.target.dataset.down, del = e.target.dataset.del;
+      const li = e.target.closest(".layer");
+      if (del) { socket.emit("widget:remove", { sceneId: activeId, widgetId: del }); if (selectedId === del) selectedId = null; return; }
+      if (up || down) return reorder(up || down, up ? -1 : 1);
+      if (li) { selectedId = li.dataset.id; renderOverlay(); renderLayers(); renderInspector(); }
+    });
+    function reorder(id, dir) {
+      const ordTopFirst = scene.widgets.slice().sort((a, b) => (b.z || 0) - (a.z || 0)).map((w) => w.id);
+      const i = ordTopFirst.indexOf(id), j = i + dir;
+      if (j < 0 || j >= ordTopFirst.length) return;
+      [ordTopFirst[i], ordTopFirst[j]] = [ordTopFirst[j], ordTopFirst[i]];
+      // サーバーは ids 先頭=z小(奥)。表示は手前が上なので反転して送る。
+      socket.emit("widget:reorder", { sceneId: activeId, ids: ordTopFirst.slice().reverse() });
+    }
+
+    // ---- プロパティ ----
+    function renderInspector() {
+      const box = $("inspector");
+      if (!scene) return (box.innerHTML = "");
+      if (!selectedId || !widget(selectedId)) { box.innerHTML = sceneInspector(); bindSceneInspector(); return; }
+      const w = widget(selectedId);
+      let h = `<h2>${typeLabel(w.type)}</h2>`;
+      h += `<div class="row2">${numF("x", w.x)}${numF("y", w.y)}${numF("w", w.w)}${numF("h", w.h)}</div>`;
+      h += typeInspector(w);
+      h += `<div style="margin-top:14px"><button class="danger sm" id="delW">この部品を削除</button></div>`;
+      box.innerHTML = h;
+      bindInspector(w);
+    }
+
+    function numF(k, v) { return `<div><label class="fld">${k.toUpperCase()}</label><input type="number" data-pos="${k}" value="${v}"></div>`; }
+    function txtF(label, path, v) { return `<label class="fld">${label}</label><input type="text" data-p="${path}" value="${escapeAttr(v ?? "")}">`; }
+    function areaF(label, path, v) { return `<label class="fld">${label}</label><textarea data-p="${path}">${escapeHtml(v ?? "")}</textarea>`; }
+    function colF(label, path, v) { return `<label class="fld">${label}</label><input type="color" data-p="${path}" value="${v || "#ffffff"}">`; }
+    function rngF(label, path, v, min, max) { return `<label class="fld">${label}: <span class="rv">${v}</span></label><input type="range" data-p="${path}" min="${min}" max="${max}" value="${v}">`; }
+    function chkF(label, path, v) { return `<label class="chk"><input type="checkbox" data-p="${path}" ${v ? "checked" : ""}>${label}</label>`; }
+    function selF(label, path, v, opts) { return `<label class="fld">${label}</label><select data-p="${path}">${opts.map((o) => `<option value="${o[0]}" ${o[0] === v ? "selected" : ""}>${o[1]}</option>`).join("")}</select>`; }
+
+    function typeInspector(w) {
+      const s = w.style || {}, c = w.config || {};
+      switch (w.type) {
+        case "text":
+          return areaF("テキスト", "config.text", c.text) + rngF("文字サイズ", "style.fontSize", s.fontSize || 28, 12, 120)
+            + selF("太さ", "style.fontWeight", String(s.fontWeight || 700), [["400", "標準"], ["700", "太字"], ["800", "極太"], ["900", "最太"]])
+            + selF("揃え", "style.align", s.align || "left", [["left", "左"], ["center", "中央"], ["right", "右"]])
+            + colF("文字色", "style.color", s.color) + txtF("背景(色/transparent)", "style.bg", s.bg);
+        case "gameFrame": case "cameraFrame":
+          return rngF("枠の太さ", "style.borderWidth", s.borderWidth ?? 3, 0, 12) + colF("枠の色", "style.borderColor", s.borderColor)
+            + rngF("角丸", "style.radius", s.radius || 0, 0, 40) + chkF("影をつける", "style.shadow", s.shadow)
+            + chkF("ラベルを表示", "config.showLabel", c.showLabel) + txtF("ラベル文字", "config.label", c.label);
+        case "shape":
+          return txtF("背景(色/グラデ)", "style.bg", s.bg) + rngF("角丸", "style.radius", s.radius || 12, 0, 60)
+            + rngF("枠の太さ", "style.borderWidth", s.borderWidth || 0, 0, 12) + colF("枠の色", "style.borderColor", s.borderColor) + chkF("影をつける", "style.shadow", s.shadow);
+        case "image":
+          return txtF("画像URL", "config.src", c.src) + selF("フィット", "config.fit", c.fit || "contain", [["contain", "全体表示"], ["cover", "切り抜き"], ["fill", "引き伸ばし"]]) + rngF("角丸", "style.radius", s.radius || 0, 0, 60);
+        case "stats":
+          return chkF("登録者数", "config.showSubs", c.showSubs !== false) + chkF("同時視聴者数", "config.showViewers", c.showViewers !== false)
+            + colF("アクセント色", "style.accent", s.accent) + rngF("背景の不透明度", "style.bgOpacity", s.bgOpacity ?? 90, 0, 100) + rngF("角丸", "style.radius", s.radius || 12, 0, 40);
+        case "participants":
+          return selF("表示対象", "config.show", c.show || "teams", [["teams", "両チーム"], ["all", "両チーム+待機列"], ["queue", "待機列のみ"], ["blue", "青のみ"], ["orange", "オレンジのみ"]])
+            + chkF("アイコン", "config.showAvatars", c.showAvatars !== false) + chkF("順番番号", "config.showNumbers", c.showNumbers !== false) + chkF("空きスロット", "config.showEmpty", c.showEmpty)
+            + rngF("背景の不透明度", "style.bgOpacity", s.bgOpacity ?? 90, 0, 100) + rngF("角丸", "style.radius", s.radius || 12, 0, 40);
+        case "comments":
+          return selF("表示形式", "config.mode", c.mode || "list", [["list", "縦の一覧"], ["ticker", "横に流れる"]])
+            + rngF("一覧の件数", "config.max", c.max || 8, 3, 20) + rngF("流れる速さ(秒)", "config.speed", c.speed || 12, 5, 30)
+            + rngF("文字サイズ", "style.fontSize", s.fontSize || 18, 12, 80) + chkF("アイコン", "config.showPhoto", c.showPhoto !== false)
+            + rngF("背景の不透明度", "style.bgOpacity", s.bgOpacity ?? 85, 0, 100) + rngF("角丸", "style.radius", s.radius || 12, 0, 40);
+      }
+      return "";
+    }
+
+    function bindInspector(w) {
+      $("inspector").querySelectorAll("[data-pos]").forEach((el) => el.addEventListener("change", () => {
+        emitWidget({ id: w.id, [el.dataset.pos]: Number(el.value) });
+      }));
+      $("inspector").querySelectorAll("[data-p]").forEach((el) => {
+        const ev = (el.type === "range") ? "input" : "change";
+        el.addEventListener(ev, () => {
+          let v = el.type === "checkbox" ? el.checked : el.type === "number" || el.type === "range" ? Number(el.value) : el.value;
+          if (el.type === "range") { const rv = el.previousElementSibling?.querySelector?.(".rv"); }
+          const rvSpan = el.parentElement.querySelector?.(".rv"); if (rvSpan && el.type === "range") rvSpan.textContent = el.value;
+          const patch = pathToObj(el.dataset.p, v);
+          emitWidget({ id: w.id, ...patch });
+        });
+      });
+      $("delW").onclick = () => { socket.emit("widget:remove", { sceneId: activeId, widgetId: w.id }); selectedId = null; };
+    }
+
+    function sceneInspector() {
+      const b = (scene && scene.background) || { type: "color", color: "#0b0e16" };
+      return `<h2>背景（シーン共通）</h2>
+        ${selF("種類", "background.type", b.type || "color", [["color", "単色"], ["gradient", "グラデーション"], ["image", "画像"], ["transparent", "透明"]])}
+        ${colF("背景色", "background.color", b.color || "#0b0e16")}
+        ${txtF("グラデーションCSS", "background.gradient", b.gradient)}
+        ${txtF("画像URL", "background.image", b.image)}
+        <div class="muted" style="margin-top:14px">部品を選ぶと、ここで色・サイズ・内容を編集できます。</div>`;
+    }
+    function bindSceneInspector() {
+      $("inspector").querySelectorAll("[data-p]").forEach((el) => el.addEventListener("change", () => {
+        const v = el.type === "checkbox" ? el.checked : el.value;
+        emitScene(pathToObj(el.dataset.p, v));
+      }));
+    }
+
+    // ---- helpers ----
+    function pathToObj(path, value) {
+      const keys = path.split("."); const root = {}; let o = root;
+      for (let i = 0; i < keys.length - 1; i++) o = o[keys[i]] = {};
+      o[keys[keys.length - 1]] = value; return root;
+    }
+    function typeLabel(t) {
+      return { gameFrame: "ゲーム枠", cameraFrame: "カメラ枠", text: "テキスト", shape: "図形パネル", image: "画像", stats: "統計", participants: "参加者", comments: "コメント" }[t] || t;
+    }
+    function labelHint(w) {
+      if (w.type === "text" && w.config?.text) return "「" + w.config.text.slice(0, 8) + "」";
+      if (w.type === "participants") return "(" + (w.config?.show || "teams") + ")";
+      if (w.type === "comments") return "(" + (w.config?.mode || "list") + ")";
+      return "";
+    }
+    function escapeHtml(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+    function escapeAttr(s) { return String(s).replace(/"/g, "&quot;"); }
+
+    layout();
+  </script>
+</body>
+</html>

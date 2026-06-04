@@ -140,6 +140,7 @@ scenes.on("change", (d) => io.emit("scenes", d));
 function printEndpoints() {
   console.log("\n----------------------------------------------");
   console.log(`管理画面   : http://localhost:${PORT}/admin.html`);
+  console.log(`画面エディタ: http://localhost:${PORT}/editor.html  ← 配信画面のレイアウト作成`);
   console.log(`配信画面   : http://localhost:${PORT}/stream.html   ← OBSブラウザソース(1920x1080)`);
   console.log(`(旧)部品別 : http://localhost:${PORT}/overlay.html`);
   console.log("  → OBSの「ブラウザソース」に上記URLを設定してください。");
