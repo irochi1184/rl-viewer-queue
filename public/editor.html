@@ -38,7 +38,14 @@
     .btnrow { display: flex; gap: 6px; flex-wrap: wrap; }
 
     .palette { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-    .palette button { background: #1a2138; border: 1px solid #2a3658; padding: 9px 6px; font-size: 12px; }
+    .palette button { background: #1a2138; border: 1px solid #2a3658; padding: 10px 6px; font-size: 12px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px; color: #d7def0; font-weight: 600; }
+    .palette button:hover { border-color: #3a4a78; background: #1e2742; }
+    .ico { width: 20px; height: 20px; display: inline-block; flex: none; }
+    .ico svg { width: 100%; height: 100%; display: block; stroke: currentColor; fill: none;
+      stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    #palette .ico { color: #9fb4ff; }
+    .btnrow .ico { width: 15px; height: 15px; vertical-align: -3px; margin-right: 5px; }
 
     .layers { list-style: none; padding: 0; margin: 0; }
     .layer { display: flex; align-items: center; gap: 6px; padding: 6px 8px; margin: 3px 0; border-radius: 7px;
@@ -86,16 +93,7 @@
     </div>
 
     <h2>部品を追加</h2>
-    <div class="palette" id="palette">
-      <button data-add="gameFrame">🎮 ゲーム枠</button>
-      <button data-add="cameraFrame">📷 カメラ枠</button>
-      <button data-add="text">🆎 テキスト</button>
-      <button data-add="shape">▭ 図形パネル</button>
-      <button data-add="image">🖼 画像</button>
-      <button data-add="stats">📊 統計</button>
-      <button data-add="participants">👥 参加者</button>
-      <button data-add="comments">💬 コメント</button>
-    </div>
+    <div class="palette" id="palette"></div>
 
     <h2>テンプレートから新規シーン</h2>
     <div class="btnrow" id="tpl"></div>
@@ -144,6 +142,21 @@
     const socket = io();
     const $ = (id) => document.getElementById(id);
     const SNAP = 10;
+
+    // シンプルな線画アイコン（currentColorで描画）
+    const ICONS = {
+      gameFrame: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M9 21h6M12 17v4"/>',
+      cameraFrame: '<path d="M8 6l1.4-2h5.2L16 6"/><rect x="3" y="6" width="18" height="13" rx="2"/><circle cx="12" cy="12.5" r="3.2"/>',
+      text: '<path d="M5 5h14M12 5v14M9.5 19h5"/>',
+      shape: '<rect x="4" y="5" width="16" height="14" rx="3"/>',
+      image: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="M21 16l-5-5L5 20"/>',
+      stats: '<path d="M4 20h16"/><path d="M7 20v-6M12 20V7M17 20v-9"/>',
+      participants: '<circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7"/>',
+      comments: '<path d="M20 4H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3v3l4-3h9a1 1 0 0 0 1-1V5a1 1 0 0 0-1-1z"/>',
+      megaphone: '<path d="M4 10v4M4 12l11-5v10L4 12z"/><path d="M15 9a4 4 0 0 1 0 6"/><path d="M7 14v3a2 2 0 0 0 4 0v-1.5"/>',
+      clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+    };
+    const ico = (name) => `<span class="ico"><svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ""}</svg></span>`;
 
     let scenesData = null, activeId = null, scene = null, selectedId = null;
     let scale = 1; // 表示px / 1920
@@ -267,8 +280,14 @@
       participants: { w: 480, h: 520, style: { blue: "#1e6bff", orange: "#ff7a18", accent: "#5cffc9", bgOpacity: 90, radius: 12 }, config: { show: "teams", showAvatars: true, showNumbers: true, showEmpty: false } },
       comments: { w: 480, h: 240, style: { accent: "#5cffc9", bgOpacity: 85, radius: 12, fontSize: 18 }, config: { mode: "list", max: 8, speed: 12, showPhoto: true } },
     };
+    const PALETTE_ITEMS = [
+      ["gameFrame", "ゲーム枠"], ["cameraFrame", "カメラ枠"], ["text", "テキスト"], ["shape", "図形パネル"],
+      ["image", "画像"], ["stats", "統計"], ["participants", "参加者"], ["comments", "コメント"],
+    ];
+    $("palette").innerHTML = PALETTE_ITEMS.map(([t, l]) => `<button data-add="${t}">${ico(t)}<span>${l}</span></button>`).join("");
     $("palette").addEventListener("click", (e) => {
-      const t = e.target.dataset.add; if (!t) return;
+      const btn = e.target.closest("[data-add]"); if (!btn) return;
+      const t = btn.dataset.add;
       const d = ADD_DEFAULTS[t];
       const w = { type: t, x: Math.round((1920 - d.w) / 2), y: Math.round((1080 - d.h) / 2), w: d.w, h: d.h, style: { ...d.style }, config: { ...d.config } };
       socket.emit("widget:upsert", { sceneId: activeId, widget: w });
@@ -399,12 +418,12 @@
     }
 
     // ---- テンプレート / カラー / 装飾 / アップロード ----
-    const TPLS = [["match", "🎮 試合中"], ["recruit", "📣 参加募集"], ["starting", "⏳ 開始前"]];
+    const TPLS = [["match", "試合中", "gameFrame"], ["recruit", "参加募集", "megaphone"], ["starting", "開始前", "clock"]];
     const PALS = [["rl", "RL", "#5cffc9"], ["neon", "ネオン", "#19e6ff"], ["sunset", "夕焼け", "#ffb020"], ["mono", "モノ", "#c9ccd6"]];
     const DECOS = [["/assets/deco-corner.svg", "コーナー", 220, 220], ["/assets/deco-bar.svg", "下帯", 760, 120], ["/assets/deco-badge.svg", "バッジ", 200, 220]];
 
-    $("tpl").innerHTML = TPLS.map(([k, l]) => `<button class="ghost sm" data-tpl="${k}">${l}</button>`).join("");
-    $("tpl").addEventListener("click", (e) => { const k = e.target.dataset.tpl; if (k) socket.emit("scene:newFromTemplate", k); });
+    $("tpl").innerHTML = TPLS.map(([k, l, i]) => `<button class="ghost sm" data-tpl="${k}">${ico(i)}${l}</button>`).join("");
+    $("tpl").addEventListener("click", (e) => { const b = e.target.closest("[data-tpl]"); if (b) socket.emit("scene:newFromTemplate", b.dataset.tpl); });
 
     $("palettes").innerHTML = PALS.map(([k, l, c]) =>
       `<button data-pal="${k}" style="display:flex;align-items:center;gap:6px;justify-content:center"><span style="width:12px;height:12px;border-radius:3px;background:${c}"></span>${l}</button>`).join("");
