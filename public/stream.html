@@ -37,7 +37,8 @@
     .stat .value { font-size: 30px; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums; }
 
     /* パネル共通 */
-    .panel { border-radius: inherit; overflow: hidden; margin-bottom: 8px; border: 1px solid rgba(255,255,255,.08); }
+    .panel { border-radius: inherit; overflow: hidden; margin-bottom: 8px; border: 1px solid rgba(255,255,255,.08);
+      background: linear-gradient(180deg, rgba(17,20,33,var(--pa,0.9)), rgba(11,13,22,var(--pa,0.9))); }
     .panel-head { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.07); }
     .panel-head .mark { width: 4px; height: 14px; border-radius: 2px; flex: none; }
     .panel-head .title { font-weight: 800; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; }
@@ -232,6 +233,7 @@
           el.style.color = st.color || "#fff";
           el.style.borderRadius = (st.radius || 12) + "px";
           el.style.overflowY = "hidden";
+          el.style.setProperty("--pa", String((st.bgOpacity == null ? 90 : st.bgOpacity) / 100));
           // 中身は refreshData で更新
           break;
         }

@@ -181,7 +181,9 @@
       renderSceneSelect();
       renderLayers();
       renderOverlay();
-      renderInspector();
+      // 編集中（スライダー等を操作中）はインスペクタを作り直さない＝ドラッグが途切れない
+      const editing = document.activeElement && $("inspector").contains(document.activeElement);
+      if (!editing) renderInspector();
     }
 
     // ---- キャンバス寸法 ----
@@ -392,15 +394,18 @@
       $("inspector").querySelectorAll("[data-pos]").forEach((el) => el.addEventListener("change", () => {
         emitWidget({ id: w.id, [el.dataset.pos]: Number(el.value) });
       }));
+      const throttledEmit = throttle((patch) => emitWidget({ id: w.id, ...patch }), 70);
       $("inspector").querySelectorAll("[data-p]").forEach((el) => {
-        const ev = (el.type === "range") ? "input" : "change";
-        el.addEventListener(ev, () => {
-          let v = el.type === "checkbox" ? el.checked : el.type === "number" || el.type === "range" ? Number(el.value) : el.value;
-          if (el.type === "range") { const rv = el.previousElementSibling?.querySelector?.(".rv"); }
-          const rvSpan = el.parentElement.querySelector?.(".rv"); if (rvSpan && el.type === "range") rvSpan.textContent = el.value;
+        el.addEventListener("input", () => {
+          let v = el.type === "checkbox" ? el.checked : (el.type === "number" || el.type === "range") ? Number(el.value) : el.value;
+          if (el.type === "range") { const rv = el.previousElementSibling && el.previousElementSibling.querySelector(".rv"); if (rv) rv.textContent = el.value; }
           const patch = pathToObj(el.dataset.p, v);
-          emitWidget({ id: w.id, ...patch });
+          // スライダーは連続発火するので間引き、それ以外は即時
+          if (el.type === "range") throttledEmit(patch);
+          else emitWidget({ id: w.id, ...patch });
         });
+        // スライダーは離した瞬間に最終値を確実に送る
+        if (el.type === "range") el.addEventListener("change", () => emitWidget({ id: w.id, ...pathToObj(el.dataset.p, Number(el.value)) }));
       });
       $("delW").onclick = () => { socket.emit("widget:remove", { sceneId: activeId, widgetId: w.id }); selectedId = null; };
       const up = $("upImg");
@@ -498,6 +503,16 @@
     }
 
     // ---- helpers ----
+    // 末尾呼び出しを保証するスロットル（スライダーの最終値を取りこぼさない）。
+    function throttle(fn, ms) {
+      let last = 0, timer = null, lastArgs = null;
+      return (...args) => {
+        lastArgs = args;
+        const now = Date.now(), remain = ms - (now - last);
+        if (remain <= 0) { last = now; fn(...args); }
+        else { clearTimeout(timer); timer = setTimeout(() => { last = Date.now(); fn(...lastArgs); }, remain); }
+      };
+    }
     function pathToObj(path, value) {
       const keys = path.split("."); const root = {}; let o = root;
       for (let i = 0; i < keys.length - 1; i++) o = o[keys[i]] = {};

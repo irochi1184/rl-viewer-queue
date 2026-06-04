@@ -1,0 +1,11 @@
+=== rl-viewer-queue 起動中（デモモード）===
+⚠ YouTubeには接続しません。動作確認・OBSレイアウト調整用です。
+
+----------------------------------------------
+管理画面   : http://localhost:3000/admin.html
+画面エディタ: http://localhost:3000/editor.html  ← 配信画面のレイアウト作成
+配信画面   : http://localhost:3000/stream.html   ← OBSブラウザソース(1920x1080)
+(旧)部品別 : http://localhost:3000/overlay.html
+  → OBSの「ブラウザソース」に上記URLを設定してください。
+----------------------------------------------
+
