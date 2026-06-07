@@ -254,8 +254,14 @@ async function main() {
   });
 
   monitor.on("error", (e) => {
-    state.lastError = e.reason;
-    console.error("YouTube APIエラー:", e.code, e.reason);
+    const quota = e.reason === "quotaExceeded" || e.reason === "rateLimitExceeded" || e.reason === "userRateLimitExceeded";
+    if (quota) {
+      state.lastError = "YouTube APIの1日の上限(クォータ)に達しました。リセット後（太平洋時間0時＝日本時間の夕方ごろ）に自動で復帰します。";
+      console.warn("⚠ クォータ超過：監視は止めず待機し、リセット後に自動復帰します。");
+    } else {
+      state.lastError = e.reason;
+      console.error("YouTube APIエラー:", e.code, e.reason);
+    }
     broadcast();
   });
 

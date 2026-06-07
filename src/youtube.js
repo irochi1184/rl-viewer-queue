@@ -17,6 +17,10 @@ export class YouTubeMonitor extends EventEmitter {
     this.youtube = youtubeApi({ version: "v3", auth });
     this.minPollIntervalMs = opts.minPollIntervalMs ?? 4000;
     this.statsIntervalMs = opts.statsIntervalMs ?? 30000;
+    // クォータ超過/レート制限時に待つ間隔。長めに待って自動回復させる（リセットで復帰）。
+    this.quotaBackoffMs = opts.quotaBackoffMs ?? 5 * 60 * 1000;
+    // 登録者数は変化が遅いので毎回は取らない（統計サイクルN回に1回）。クォータ節約。
+    this.subsEvery = opts.subsEvery ?? 10;
 
     this.liveChatId = null;
     this.videoId = null;
@@ -26,6 +30,8 @@ export class YouTubeMonitor extends EventEmitter {
     this._chatTimer = null;
     this._statsTimer = null;
     this._running = false;
+    this._statsTick = 0;
+    this._lastSubs = null;
     // 初回ポーリングで過去ログを大量に処理しないため、起動以降のメッセージのみ対象にする。
     this._startedAt = Date.now();
   }
@@ -103,28 +109,33 @@ export class YouTubeMonitor extends EventEmitter {
       }
     } catch (e) {
       this._handleError(e);
-      // チャットが終了(403/404)していたら停止イベント。
+      // 本当にチャットが終了/消滅したときだけ停止。
       if (this._isLiveEnded(e)) {
         this.emit("status", { connected: false, reason: "live-ended" });
         this.stop();
         return;
       }
+      // クォータ超過/レート制限は「終了」ではない。長めに待って継続（リセット後に自動復帰）。
+      if (this._isQuota(e)) waitMs = this.quotaBackoffMs;
     }
     this._chatTimer = setTimeout(() => this._pollChat(), waitMs);
   }
 
   async _pollStats() {
     if (!this._running) return;
+    let nextMs = this.statsIntervalMs;
     try {
-      const [subs, viewers] = await Promise.all([
-        this._fetchSubscriberCount(),
-        this._fetchConcurrentViewers(),
-      ]);
-      this.emit("stats", { subscriberCount: subs, concurrentViewers: viewers });
+      // 登録者数は subsEvery 回に1回だけ取得（クォータ節約）。視聴者数は毎回。
+      const doSubs = this._statsTick++ % this.subsEvery === 0;
+      const subs = doSubs ? await this._fetchSubscriberCount() : this._lastSubs;
+      if (doSubs) this._lastSubs = subs;
+      const viewers = await this._fetchConcurrentViewers();
+      this.emit("stats", { subscriberCount: this._lastSubs, concurrentViewers: viewers });
     } catch (e) {
       this._handleError(e);
+      if (this._isQuota(e)) nextMs = this.quotaBackoffMs; // クォータ中は統計も間隔を空ける
     }
-    this._statsTimer = setTimeout(() => this._pollStats(), this.statsIntervalMs);
+    this._statsTimer = setTimeout(() => this._pollStats(), nextMs);
   }
 
   async _fetchSubscriberCount() {
@@ -150,10 +161,23 @@ export class YouTubeMonitor extends EventEmitter {
     return Number(details.concurrentViewers);
   }
 
+  _reasonOf(e) {
+    return e?.errors?.[0]?.reason || e?.response?.data?.error?.errors?.[0]?.reason || "";
+  }
+
+  // 本当に配信/チャットが終了・消滅したか（quota や rate limit は含めない）。
   _isLiveEnded(e) {
     const code = e?.code || e?.response?.status;
-    const reason = e?.errors?.[0]?.reason || e?.response?.data?.error?.errors?.[0]?.reason;
-    return code === 403 || code === 404 || reason === "liveChatEnded" || reason === "liveChatNotFound";
+    const reason = this._reasonOf(e);
+    if (reason === "liveChatEnded" || reason === "liveChatNotFound") return true;
+    if (code === 404) return true;
+    return false;
+  }
+
+  // クォータ超過・レート制限（403だが「終了」ではない。待てば回復する）。
+  _isQuota(e) {
+    const reason = this._reasonOf(e);
+    return reason === "quotaExceeded" || reason === "rateLimitExceeded" || reason === "userRateLimitExceeded";
   }
 
   _handleError(e) {
