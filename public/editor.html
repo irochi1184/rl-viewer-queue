@@ -104,6 +104,7 @@
 
     <h2>背景プリセット</h2>
     <div class="bggrid" id="bgPresets"></div>
+    <button id="openBg" style="width:100%;margin-top:7px">背景の詳細設定・カスタム作成を開く</button>
 
     <h2>カラー（現在のシーンに適用）</h2>
     <div class="palette" id="palettes"></div>
@@ -223,7 +224,11 @@
     $("overlay").addEventListener("pointerdown", (e) => {
       const handle = e.target.closest(".h");
       const box = e.target.closest(".box");
-      if (!box) return;
+      // 空白(部品以外)をクリックしたら選択解除 → 背景インスペクタを表示
+      if (!box) {
+        if (selectedId !== null) { selectedId = null; renderOverlay(); renderLayers(); renderInspector(); }
+        return;
+      }
       const id = box.dataset.id;
       selectedId = id;
       const w = widget(id);
@@ -527,6 +532,10 @@
       const b = e.target.closest("[data-bg]"); if (!b) return;
       emitScene({ background: { type: "css", css: BG_PRESETS[+b.dataset.bg][1], image: "" } });
     });
+
+    // 「背景の詳細設定・カスタム作成を開く」= 選択解除して背景インスペクタを表示
+    function showBackgroundPanel() { selectedId = null; renderOverlay(); renderLayers(); renderInspector(); }
+    $("openBg").onclick = showBackgroundPanel;
 
     // 装飾（SVG画像 / 発光シェイプ）。各要素は完成ウィジェット定義。
     const DECOS = [
