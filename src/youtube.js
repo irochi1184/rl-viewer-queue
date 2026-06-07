@@ -4,6 +4,7 @@
 //  - チャンネル登録者数 / 同時視聴者数の取得
 import { youtube as youtubeApi } from "@googleapis/youtube";
 import { EventEmitter } from "node:events";
+import { LiveChatScraper } from "./livechat.js";
 
 export class YouTubeMonitor extends EventEmitter {
   /**
@@ -21,6 +22,9 @@ export class YouTubeMonitor extends EventEmitter {
     this.quotaBackoffMs = opts.quotaBackoffMs ?? 5 * 60 * 1000;
     // 登録者数は変化が遅いので毎回は取らない（統計サイクルN回に1回）。クォータ節約。
     this.subsEvery = opts.subsEvery ?? 10;
+    // チャット取得方式: "innertube"(API不使用・クォータ消費ゼロ) | "api"(従来のData API)
+    this.chatSource = opts.chatSource === "api" ? "api" : "innertube";
+    this._scraper = null;
 
     this.liveChatId = null;
     this.videoId = null;
@@ -60,20 +64,42 @@ export class YouTubeMonitor extends EventEmitter {
     return { liveChatId: this.liveChatId, videoId: this.videoId };
   }
 
-  // 監視を開始する。
+  // 監視を開始する。配信の発見・統計はData API、チャットは方式に応じて取得。
   async start() {
     if (this._running) return;
     await this.resolveActiveBroadcast();
     this._running = true;
     this.emit("status", { connected: true, videoId: this.videoId });
-    this._pollChat();
+    await this._startChat();
     this._pollStats();
+  }
+
+  // チャット取得を開始。InnerTube優先、失敗時はAPI方式へ自動フォールバック。
+  async _startChat() {
+    if (this.chatSource === "innertube") {
+      try {
+        this._scraper = new LiveChatScraper(this.videoId, { minIntervalMs: 1500 });
+        this._scraper.on("chat", (m) => this.emit("chat", m));
+        this._scraper.on("ended", () => { this.emit("status", { connected: false, reason: "live-ended" }); this.stop(); });
+        this._scraper.on("error", (e) => this.emit("error", { code: 0, reason: "innertube: " + e.reason }));
+        await this._scraper.start();
+        this.emit("chatSource", "innertube");
+        return;
+      } catch (e) {
+        console.warn("⚠ チャットのInnerTube方式を開始できませんでした。Data API方式に切り替えます:", e.message);
+        this._scraper = null;
+        this.chatSource = "api";
+      }
+    }
+    this.emit("chatSource", "api");
+    this._pollChat();
   }
 
   stop() {
     this._running = false;
     clearTimeout(this._chatTimer);
     clearTimeout(this._statsTimer);
+    if (this._scraper) { this._scraper.stop(); this._scraper = null; }
   }
 
   async _pollChat() {

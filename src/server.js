@@ -20,6 +20,8 @@ const JOIN_KEYWORDS = (process.env.JOIN_KEYWORDS || "参加希望")
   .filter(Boolean);
 const MIN_POLL_INTERVAL_MS = Number(process.env.MIN_POLL_INTERVAL_MS || 4000);
 const STATS_INTERVAL_MS = Number(process.env.STATS_INTERVAL_MS || 30000);
+// チャット取得方式: innertube(API不使用・クォータ消費ゼロ／既定) | api(従来のData API)
+const CHAT_SOURCE = (process.env.CHAT_SOURCE || "innertube").toLowerCase();
 const DEFAULT_TEAM_SIZE = Number(process.env.TEAM_SIZE || 3);
 // デモモード: YouTube認証なしでWebサーバーだけ起動し、ダミーの参加希望を流す。
 const DEMO = process.argv.includes("--demo") || process.env.DEMO === "1";
@@ -216,6 +218,15 @@ async function main() {
   const monitor = new YouTubeMonitor(auth, {
     minPollIntervalMs: MIN_POLL_INTERVAL_MS,
     statsIntervalMs: STATS_INTERVAL_MS,
+    chatSource: CHAT_SOURCE,
+  });
+
+  monitor.on("chatSource", (s) => {
+    console.log(
+      s === "innertube"
+        ? "チャット取得: InnerTube方式（Data APIクォータを消費しません）"
+        : "チャット取得: Data API方式（クォータを消費します）"
+    );
   });
 
   monitor.on("status", (s) => {
