@@ -9,6 +9,7 @@ import { publicDir, dataDir } from "./paths.js"; // dotenv はここで読み込
 
 import { getAuthorizedClient } from "./auth.js";
 import { YouTubeMonitor } from "./youtube.js";
+import { ScrapeMonitor } from "./scrapemonitor.js";
 import { ParticipantQueue } from "./queue.js";
 import { OverlaySettings } from "./settings.js";
 import { SceneStore } from "./scenes.js";
@@ -212,14 +213,23 @@ async function main() {
   console.log("=== rl-viewer-queue 起動中 ===");
   console.log("参加希望キーワード:", JOIN_KEYWORDS.join(" / "));
 
-  // 認可（未認可ならブラウザが開く）。
-  const auth = await getAuthorizedClient();
-
-  const monitor = new YouTubeMonitor(auth, {
-    minPollIntervalMs: MIN_POLL_INTERVAL_MS,
-    statsIntervalMs: STATS_INTERVAL_MS,
-    chatSource: CHAT_SOURCE,
-  });
+  // YT_CHANNEL が指定されていれば「完全API不使用モード」（OAuth不要・チャンネルをスクレイプ）。
+  // 未指定なら従来のOAuth方式（チャット=InnerTube/ API、統計=Data API）。
+  let monitor;
+  if (process.env.YT_CHANNEL) {
+    console.log("モード: 完全API不使用（チャンネルをスクレイプ。OAuth不要）:", process.env.YT_CHANNEL);
+    monitor = new ScrapeMonitor(process.env.YT_CHANNEL, {
+      viewersIntervalMs: STATS_INTERVAL_MS,
+      subsIntervalMs: 5 * 60 * 1000,
+    });
+  } else {
+    const auth = await getAuthorizedClient(); // 未認可ならブラウザが開く
+    monitor = new YouTubeMonitor(auth, {
+      minPollIntervalMs: MIN_POLL_INTERVAL_MS,
+      statsIntervalMs: STATS_INTERVAL_MS,
+      chatSource: CHAT_SOURCE,
+    });
+  }
 
   monitor.on("chatSource", (s) => {
     console.log(
