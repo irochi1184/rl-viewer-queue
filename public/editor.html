@@ -295,8 +295,8 @@
       comments: { w: 480, h: 240, style: { accent: "#5cffc9", bgOpacity: 85, radius: 12, fontSize: 18 }, config: { mode: "list", max: 8, speed: 12, showPhoto: true } },
     };
     const PALETTE_ITEMS = [
-      ["gameFrame", "ゲーム枠"], ["cameraFrame", "カメラ枠"], ["text", "テキスト"], ["shape", "図形パネル"],
-      ["image", "画像"], ["stats", "統計"], ["participants", "参加者"], ["comments", "コメント"],
+      ["text", "テキスト"], ["shape", "図形パネル"], ["image", "画像"],
+      ["stats", "統計"], ["participants", "参加者"], ["comments", "コメント"],
     ];
     $("palette").innerHTML = PALETTE_ITEMS.map(([t, l]) => `<button data-add="${t}">${ico(t)}<span>${l}</span></button>`).join("");
     $("palette").addEventListener("click", (e) => {
